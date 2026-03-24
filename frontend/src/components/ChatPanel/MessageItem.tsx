@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Avatar, Collapse } from "antd";
 import { RobotOutlined, UserOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
@@ -15,10 +16,25 @@ export default function MessageItem({
   isStreaming = false,
 }: Props) {
   const isUser = message.role === "user";
-  const reasoningOpen =
-    Boolean(message.reasoning) &&
-    isLastAssistant &&
-    isStreaming;
+  const [thinkingExpanded, setThinkingExpanded] = useState(false);
+  const wasStreamingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isLastAssistant) {
+      wasStreamingRef.current = false;
+      return;
+    }
+    if (!message.reasoning) {
+      wasStreamingRef.current = isStreaming;
+      return;
+    }
+    if (isStreaming) {
+      setThinkingExpanded(true);
+    } else if (wasStreamingRef.current) {
+      setThinkingExpanded(false);
+    }
+    wasStreamingRef.current = isStreaming;
+  }, [message.reasoning, isLastAssistant, isStreaming]);
 
   return (
     <div className={`message-item ${isUser ? "user" : "assistant"}`}>
@@ -51,7 +67,11 @@ export default function MessageItem({
               <Collapse
                 bordered={false}
                 className="thinking-collapse"
-                activeKey={reasoningOpen ? ["think"] : []}
+                activeKey={thinkingExpanded ? ["think"] : []}
+                onChange={(keys) => {
+                  const k = Array.isArray(keys) ? keys : [keys];
+                  setThinkingExpanded(k.includes("think"));
+                }}
                 items={[
                   {
                     key: "think",
