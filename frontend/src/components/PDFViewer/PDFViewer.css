@@ -1,0 +1,140 @@
+.pdf-viewer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: #f5f5f5;
+}
+
+.upload-area {
+  width: 420px;
+}
+
+.pdf-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #525659;
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e8e8e8;
+  flex-shrink: 0;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-filename {
+  font-size: 13px;
+  color: #595959;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-divider {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: #e8e8e8;
+  vertical-align: middle;
+  margin: 0 4px;
+}
+
+.page-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #595959;
+}
+
+.scale-label {
+  font-size: 12px;
+  color: #595959;
+  min-width: 40px;
+  text-align: center;
+}
+
+.pdf-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+.pdf-page-wrapper {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.pdf-page-placeholder {
+  width: 100%;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, #4a5056 0%, #3a3e44 100%);
+  border-radius: 1px;
+}
+
+/* Canvas sits under text layer but still captures hit-testing in some browsers */
+.pdf-viewer .react-pdf__Page__canvas {
+  pointer-events: none !important;
+}
+
+/* Let mouse events reach the text layer for selection (annotation sits on top by default) */
+.pdf-viewer .annotationLayer {
+  pointer-events: none;
+}
+
+.pdf-viewer .textLayer {
+  user-select: text;
+  cursor: text;
+}
+
+.pdf-viewer .textLayer span {
+  user-select: text;
+}
+
+.page-number-label {
+  text-align: center;
+  padding: 4px 0;
+  font-size: 11px;
+  color: #999;
+  background: #fff;
+}
+
+.text-selection-popover {
+  position: absolute;
+  z-index: 10000;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -90%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+  }
+}
+
+/* react-pdf text layer selection highlighting */
+.react-pdf__Page__textContent ::selection {
+  background: rgba(22, 119, 255, 0.3);
+}
