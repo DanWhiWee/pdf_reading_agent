@@ -17,6 +17,12 @@ SYSTEM_PROMPT = (
     "Reply in the same language as the user's latest question."
 )
 
+RAG_SYSTEM_ADDENDUM = (
+    " The document section contains semantically retrieved excerpts labeled [1], [2], etc. "
+    "When you refer to a specific passage, mention its bracket number so the reader can "
+    "jump to the corresponding source."
+)
+
 
 def _delta_chunks(delta: Any) -> List[Tuple[str, str]]:
     """Return (kind, text) where kind is 'reasoning' or 'content'."""
@@ -82,8 +88,10 @@ class LLMService:
         history: List[dict],
         context: str = "",
         selected_text: str = "",
+        rag_mode: bool = False,
     ) -> List[dict]:
-        messages: List[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        sys_content = SYSTEM_PROMPT + (RAG_SYSTEM_ADDENDUM if rag_mode else "")
+        messages: List[dict] = [{"role": "system", "content": sys_content}]
 
         for msg in history[-14:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
@@ -110,10 +118,13 @@ class LLMService:
         context: str = "",
         selected_text: str = "",
         model: Optional[str] = None,
+        rag_mode: bool = False,
     ) -> AsyncGenerator[Tuple[str, str], None]:
         history = history or []
         model_name = model or self.cfg.model
-        messages = self._build_messages(user_message, history, context, selected_text)
+        messages = self._build_messages(
+            user_message, history, context, selected_text, rag_mode=rag_mode
+        )
 
         kwargs: dict = {
             "model": model_name,

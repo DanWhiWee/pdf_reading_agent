@@ -3,6 +3,7 @@ import "allotment/dist/style.css";
 
 import ChatPanel from "./components/ChatPanel/ChatPanel";
 import PDFViewer from "./components/PDFViewer/PDFViewer";
+import PdfTocSplit from "./components/PDFViewer/PdfTocSplit";
 import "./App.css";
 
 export default function App() {
@@ -13,7 +14,9 @@ export default function App() {
           <ChatPanel />
         </Allotment.Pane>
         <Allotment.Pane minSize={400}>
-          <PDFViewer />
+          <PdfTocSplit>
+            <PDFViewer />
+          </PdfTocSplit>
         </Allotment.Pane>
       </Allotment>
     </div>

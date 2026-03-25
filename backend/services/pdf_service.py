@@ -50,16 +50,35 @@ class PDFService:
         file_path = self.upload_dir / f"{doc_id}.pdf"
         doc = fitz.open(file_path)
         results = []
-        for i, page in enumerate(doc):
-            for inst in page.search_for(query):
-                results.append(
-                    {
-                        "page": i + 1,
-                        "rect": [inst.x0, inst.y0, inst.x1, inst.y1],
-                        "text": query,
-                    }
-                )
-        doc.close()
+        max_hits = 200
+        flags_dehyph = int(getattr(fitz, "TEXT_DEHYPHENATE", 0))
+        try:
+            for i, page in enumerate(doc):
+                try:
+                    if flags_dehyph:
+                        hits = page.search_for(query, flags=flags_dehyph)
+                    else:
+                        hits = page.search_for(query)
+                except TypeError:
+                    hits = page.search_for(query)
+                for inst in hits:
+                    r = fitz.Rect(inst)
+                    results.append(
+                        {
+                            "page": i + 1,
+                            "rect": [
+                                float(r.x0),
+                                float(r.y0),
+                                float(r.x1),
+                                float(r.y1),
+                            ],
+                            "text": query,
+                        }
+                    )
+                    if len(results) >= max_hits:
+                        return results
+        finally:
+            doc.close()
         return results
 
     def get_file_path(self, doc_id: str) -> Optional[Path]:

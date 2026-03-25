@@ -1,4 +1,4 @@
-import type { DocumentMeta } from "../types";
+import type { CitationMeta, DocumentMeta } from "../types";
 
 /** Empty = same origin / Vite proxy to backend. Set VITE_API_BASE if you serve the SPA without a proxy. */
 const BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -31,6 +31,12 @@ export async function searchPDF(
   return res.json();
 }
 
+export async function fetchRagStatus(docId: string): Promise<{ ready: boolean }> {
+  const res = await fetch(`${BASE}/api/pdf/${docId}/rag-status`);
+  if (!res.ok) return { ready: false };
+  return res.json();
+}
+
 export interface StreamChatParams {
   message: string;
   doc_id?: string | null;
@@ -42,10 +48,12 @@ export interface StreamChatParams {
 
 export type StreamToken = { token: string; kind: "reasoning" | "content" };
 
+export type StreamDoneMeta = { citations?: CitationMeta[] };
+
 export async function streamChat(
   params: StreamChatParams,
   onToken: (delta: StreamToken) => void,
-  onDone: () => void,
+  onDone: (meta?: StreamDoneMeta) => void,
   onError: (err: string) => void,
   signal?: AbortSignal
 ) {
@@ -70,36 +78,52 @@ export async function streamChat(
 
   if (!res.ok || !res.body) {
     onError(`HTTP ${res.status}`);
+    onDone(undefined);
     return;
   }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let doneMeta: StreamDoneMeta | undefined;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const data = JSON.parse(line.slice(6));
-        if (data.token != null && data.token !== "") {
-          const kind =
-            data.kind === "reasoning" ? "reasoning" : "content";
-          onToken({ token: data.token, kind });
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.token != null && data.token !== "") {
+            const kind =
+              data.kind === "reasoning" ? "reasoning" : "content";
+            onToken({ token: data.token, kind });
+          }
+          if (data.done) {
+            if (Array.isArray(data.citations) && data.citations.length > 0) {
+              doneMeta = { citations: data.citations as CitationMeta[] };
+            }
+          }
+          if (data.error) {
+            onError(data.error);
+            onDone(undefined);
+            return;
+          }
+        } catch {
+          // ignore malformed lines
         }
-        if (data.done) onDone();
-        if (data.error) onError(data.error);
-      } catch {
-        // ignore malformed lines
       }
     }
+    onDone(doneMeta);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    onError(msg);
+    onDone(undefined);
   }
-  onDone();
 }

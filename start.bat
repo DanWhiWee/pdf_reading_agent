@@ -24,7 +24,8 @@ echo [1/2] Starting backend (FastAPI) on http://127.0.0.1:8000 ...
 start "PDF-Agent-Backend" cmd /k "cd /d "%PROJECT_DIR%backend" && python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000"
 
 echo [2/2] Starting frontend (Vite) on http://localhost:5173 ...
-start "PDF-Agent-Frontend" cmd /k "cd /d "%PROJECT_DIR%frontend" && npm run dev"
+REM Prepend Node install dir so npm can find node.exe when PATH is minimal
+start "PDF-Agent-Frontend" cmd /k "set PATH=C:\Program Files\nodejs;%PATH%&& cd /d "%PROJECT_DIR%frontend" && npm run dev"
 
 timeout /t 5 /nobreak >nul
 echo.

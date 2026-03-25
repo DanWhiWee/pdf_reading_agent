@@ -4,14 +4,16 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from config import UPLOAD_DIR, PDF_CONTEXT_MAX_CHARS
+from config import DATA_DIR, UPLOAD_DIR, PDF_CONTEXT_MAX_CHARS
 from models.schemas import ChatRequest
 from services.llm_service import LLMService
 from services.pdf_service import PDFService
+from services.rag_service import RAGService
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 llm_service = LLMService()
 pdf_service = PDFService(UPLOAD_DIR)
+rag_service = RAGService(DATA_DIR, UPLOAD_DIR)
 
 log = logging.getLogger("uvicorn.error")
 
@@ -19,17 +21,36 @@ log = logging.getLogger("uvicorn.error")
 @router.post("/stream")
 async def stream_chat(request: ChatRequest):
     context = ""
+    rag_mode = False
     if request.doc_id:
-        context = pdf_service.extract_context_for_chat(
-            request.doc_id,
-            PDF_CONTEXT_MAX_CHARS,
-            request.page_number,
-        )
+        if rag_service.index_exists(request.doc_id):
+            ctx, _ = rag_service.retrieve_for_chat(
+                request.doc_id,
+                request.message or "",
+                request.selected_text or "",
+                request.page_number,
+            )
+            if ctx.strip():
+                context = ctx
+                rag_mode = True
+            else:
+                context = pdf_service.extract_context_for_chat(
+                    request.doc_id,
+                    PDF_CONTEXT_MAX_CHARS,
+                    request.page_number,
+                )
+        else:
+            context = pdf_service.extract_context_for_chat(
+                request.doc_id,
+                PDF_CONTEXT_MAX_CHARS,
+                request.page_number,
+            )
         if not context.strip():
             context = (
                 "[Note: This PDF has no extractable text layer — it may be scanned images. "
                 "Answer from the user's question and any quoted selection only.]"
             )
+            rag_mode = False
 
     sel_len = len((request.selected_text or "").strip())
     log.warning(
@@ -51,9 +72,11 @@ async def stream_chat(request: ChatRequest):
                 context=context,
                 selected_text=request.selected_text or "",
                 model=request.model,
+                rag_mode=rag_mode,
             ):
                 yield f"data: {json.dumps({'token': token, 'kind': kind}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'done': True})}\n\n"
+            done_payload: dict = {"done": True}
+            yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 

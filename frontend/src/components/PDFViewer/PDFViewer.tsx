@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Document, pdfjs } from "react-pdf";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
@@ -17,6 +17,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pd
 
 export default function PDFViewer() {
   const { currentDocId, currentDocMeta } = useAppStore();
+  const pdfNav = useAppStore((s) => s.pdfNav);
+  const pdfSearch = useAppStore((s) => s.pdfSearch);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.2);
@@ -58,12 +60,70 @@ export default function PDFViewer() {
     };
   }, [scale]);
 
+  const searchScrollPageRef = useRef<number | null>(null);
+
   const scrollToPage = useCallback((page: number) => {
     const el = pageRefs.current.get(page);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, []);
+
+  const scheduleScrollToPage = useCallback(
+    (page: number) => {
+      const t1 = window.setTimeout(() => scrollToPage(page), 60);
+      const t2 = window.setTimeout(() => scrollToPage(page), 220);
+      const t3 = window.setTimeout(() => scrollToPage(page), 450);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    },
+    [scrollToPage]
+  );
+
+  const searchJumpPage = useMemo(() => {
+    if (!pdfSearch?.hits?.length) return null;
+    return pdfSearch.hits[pdfSearch.index]?.page ?? null;
+  }, [pdfSearch]);
+
+  const navJumpPage = pdfNav?.page ?? null;
+
+  const searchHitContext = useMemo(() => {
+    if (!pdfSearch?.hits.length) return null;
+    const hit = pdfSearch.hits[pdfSearch.index];
+    if (!hit) return null;
+    let ordinal = 0;
+    for (let i = 0; i < pdfSearch.index; i++) {
+      if (pdfSearch.hits[i].page === hit.page) ordinal++;
+    }
+    const query = (pdfSearch.query || hit.text || "").trim();
+    const fallback =
+      hit.rect && hit.rect.length === 4 ? [hit.rect as number[]] : null;
+    return { page: hit.page, query, ordinal, fallback };
+  }, [pdfSearch]);
+
+  useEffect(() => {
+    const nav = useAppStore.getState().pdfNav;
+    if (!nav) return;
+    return scheduleScrollToPage(nav.page);
+  }, [pdfNav?.nonce, scheduleScrollToPage]);
+
+  useEffect(() => {
+    if (!pdfSearch?.hits.length) {
+      searchScrollPageRef.current = null;
+      return;
+    }
+    const hit = pdfSearch.hits[pdfSearch.index];
+    if (!hit) return;
+    const p = hit.page;
+    if (searchScrollPageRef.current === p) {
+      return;
+    }
+    searchScrollPageRef.current = p;
+    return scheduleScrollToPage(p);
+  }, [pdfSearch, scheduleScrollToPage]);
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -137,9 +197,28 @@ export default function PDFViewer() {
                 key={pageNumber}
                 pageNumber={pageNumber}
                 scale={scale}
-                eager={pageNumber <= 2}
+                eager={
+                  pageNumber <= 2 ||
+                  (searchJumpPage != null && pageNumber === searchJumpPage) ||
+                  (navJumpPage != null && pageNumber === navJumpPage)
+                }
                 estimatedHeight={estimatedPageHeight}
                 registerWrapper={registerWrapper}
+                searchDomHint={
+                  searchHitContext &&
+                  searchHitContext.page === pageNumber &&
+                  searchHitContext.query
+                    ? {
+                        query: searchHitContext.query,
+                        ordinal: searchHitContext.ordinal,
+                      }
+                    : null
+                }
+                fallbackHighlightRectsPdf={
+                  searchHitContext?.page === pageNumber
+                    ? searchHitContext.fallback
+                    : null
+                }
               />
             );
           })}

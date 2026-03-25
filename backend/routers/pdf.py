@@ -1,19 +1,26 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 
-from config import UPLOAD_DIR
+from config import DATA_DIR, UPLOAD_DIR
 from services.pdf_service import PDFService
+from services.rag_service import RAGService
 
 router = APIRouter(prefix="/api/pdf", tags=["pdf"])
 pdf_service = PDFService(UPLOAD_DIR)
+rag_service = RAGService(DATA_DIR, UPLOAD_DIR)
 
 
 @router.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
     content = await file.read()
     meta = pdf_service.save_and_parse(content, file.filename)
+    doc_id = meta["id"]
+    background_tasks.add_task(rag_service.build_index, doc_id)
     return meta
 
 
@@ -43,3 +50,8 @@ async def search_in_pdf(doc_id: str, q: str = ""):
         return {"results": []}
     results = pdf_service.search_text(doc_id, q)
     return {"results": results}
+
+
+@router.get("/{doc_id}/rag-status")
+async def rag_status(doc_id: str):
+    return {"ready": rag_service.index_exists(doc_id)}

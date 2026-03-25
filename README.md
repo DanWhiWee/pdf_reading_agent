@@ -8,6 +8,7 @@
 - 划选 PDF 文字后一键带入上下文提问
 - SSE 流式输出；若接口返回推理字段，思考过程与正文分区展示，结束后思考区默认收起，仍可手动展开
 - 工具栏：缩放、翻页；会话内会记住当前打开的文档（sessionStorage）
+- **Phase 2**：上传后自动构建 **FAISS 向量索引**，对话按语义检索相关片段（RAG）；回答结束可点 **来源** 跳转页码并高亮；**目录侧栏**；工具栏 **文档内搜索**（PyMuPDF 文本匹配）。索引未就绪时自动回退为原来的按页全文摘录。
 
 ## 环境要求
 
@@ -26,7 +27,7 @@ cp .env.example .env
 
 至少填写 **`LLM_API_KEY`**，并按服务商设置 **`LLM_MODEL`**；使用通义、Ollama 等时需配置 **`LLM_API_BASE`**。可选 **`PDF_CONTEXT_MAX_CHARS`**（默认 24000）：数值越小，每次注入的 PDF 字数越少，通常更快、更省 token。
 
-说明见根目录 **`.env.example`** 内注释。
+RAG 相关变量（`RAG_*`、`RAG_ENABLED`）见 **`.env.example`**。首次启用会下载嵌入模型，体积较大，需较长时间；若 `pip install` 失败，可暂时设置 **`RAG_ENABLED=false`**，仅使用全文摘录模式。
 
 ### 2. 安装依赖并启动
 
@@ -74,4 +75,4 @@ npm run dev
 
 ## 技术栈
 
-Python（FastAPI、PyMuPDF、LiteLLM）· React（TypeScript、Zustand、react-pdf、Ant Design）· Vite
+Python（FastAPI、PyMuPDF、LiteLLM、faiss-cpu、sentence-transformers）· React（TypeScript、Zustand、react-pdf、Ant Design）· Vite

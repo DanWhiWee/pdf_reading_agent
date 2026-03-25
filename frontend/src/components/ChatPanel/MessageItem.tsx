@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Avatar, Collapse } from "antd";
 import { RobotOutlined, UserOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { preprocessLlmMathForMarkdown } from "../../utils/markdownMath";
 import type { ChatMessage } from "../../types";
 
 interface Props {
@@ -35,6 +39,8 @@ export default function MessageItem({
     }
     wasStreamingRef.current = isStreaming;
   }, [message.reasoning, isLastAssistant, isStreaming]);
+
+  const mdSource = preprocessLlmMathForMarkdown(message.content || "…");
 
   return (
     <div className={`message-item ${isUser ? "user" : "assistant"}`}>
@@ -87,7 +93,14 @@ export default function MessageItem({
               />
             ) : null}
             <div className="markdown-body">
-              <ReactMarkdown>{message.content || "…"}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[
+                  [rehypeKatex, { strict: false, throwOnError: false }],
+                ]}
+              >
+                {mdSource}
+              </ReactMarkdown>
             </div>
           </>
         )}
