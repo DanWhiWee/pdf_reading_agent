@@ -184,7 +184,8 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: #525659;
+  /* Chrome PDF viewer–style chrome; slightly softer than pure neutral */
+  background: #4a4d50;
 }
 
 .pdf-toolbar {
@@ -242,8 +243,9 @@
 }
 
 .pdf-page-wrapper {
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  /* Slightly warm paper reduces glare vs pure #fff (long reading) */
+  background: #faf9f7;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22), 0 0 1px rgba(0, 0, 0, 0.08);
   position: relative;
 }
 
@@ -257,6 +259,10 @@
 /* Canvas sits under text layer but still captures hit-testing in some browsers */
 .pdf-viewer .react-pdf__Page__canvas {
   pointer-events: none !important;
+  image-rendering: auto;
+  /* Hint layer compositing; avoids some GPUs blurring scaled canvases */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* Let mouse events reach the text layer for selection (annotation sits on top by default) */
@@ -271,14 +277,16 @@
 
 .pdf-viewer .textLayer span {
   user-select: text;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .page-number-label {
   text-align: center;
   padding: 4px 0;
   font-size: 11px;
-  color: #999;
-  background: #fff;
+  color: #8c8c8c;
+  background: #faf9f7;
 }
 
 .text-selection-popover {

@@ -46,7 +46,7 @@ export default function TOCSidebar({ onCollapse }: Props) {
               <button
                 type="button"
                 className="pdf-toc-link"
-                onClick={() => navigatePdf({ page: item.page })}
+                onClick={() => navigatePdf({ page: item.page, y: item.y, title: item.title })}
               >
                 {item.title}
               </button>

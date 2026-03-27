@@ -12,6 +12,7 @@ import {
   ZoomInOutlined,
   ZoomOutOutlined,
   ExpandOutlined,
+  ColumnWidthOutlined,
   UploadOutlined,
   FileTextOutlined,
   SearchOutlined,
@@ -37,6 +38,8 @@ interface Props {
   scale: number;
   onPageChange: (page: number) => void;
   onScaleChange: (scale: number) => void;
+  /** Like Chrome: fit page width to the viewer */
+  onFitWidth?: () => void;
 }
 
 export default function PDFToolbar({
@@ -45,6 +48,7 @@ export default function PDFToolbar({
   scale,
   onPageChange,
   onScaleChange,
+  onFitWidth,
 }: Props) {
   const {
     currentDocId,
@@ -208,7 +212,15 @@ export default function PDFToolbar({
               onClick={() => onScaleChange(Math.min(3, scale + 0.2))}
             />
           </Tooltip>
-          <Tooltip title="100% 缩放">
+          <Tooltip title="适应宽度（与 Chrome 打开 PDF 类似）">
+            <Button
+              icon={<ColumnWidthOutlined />}
+              size="small"
+              disabled={!onFitWidth}
+              onClick={() => onFitWidth?.()}
+            />
+          </Tooltip>
+          <Tooltip title="100% 缩放（PDF 原始尺寸）">
             <Button
               icon={<ExpandOutlined />}
               size="small"

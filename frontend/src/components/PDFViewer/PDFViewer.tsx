@@ -11,9 +11,12 @@ import UploadArea from "./UploadArea";
 import PDFToolbar from "./PDFToolbar";
 import TextSelectionPopover from "./TextSelectionPopover";
 import LazyPdfPage from "./LazyPdfPage";
+import { computeFitWidthScale } from "../../utils/pdfDisplay";
 import "./PDFViewer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+
+type ScaleMode = "fitWidth" | "manual";
 
 export default function PDFViewer() {
   const { currentDocId, currentDocMeta } = useAppStore();
@@ -21,7 +24,8 @@ export default function PDFViewer() {
   const pdfSearch = useAppStore((s) => s.pdfSearch);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [scale, setScale] = useState(1.2);
+  const [scale, setScale] = useState(1);
+  const [scaleMode, setScaleMode] = useState<ScaleMode>("fitWidth");
   const [estimatedPageHeight, setEstimatedPageHeight] = useState(800);
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -35,16 +39,33 @@ export default function PDFViewer() {
     []
   );
 
-  const onDocumentLoadSuccess = useCallback(
-    async (pdf: PDFDocumentProxy) => {
-      pdfRef.current = pdf;
-      setNumPages(pdf.numPages);
-      setCurrentPage(1);
-      const page = await pdf.getPage(1);
-      setEstimatedPageHeight(page.getViewport({ scale }).height);
-    },
-    [scale]
-  );
+  const onDocumentLoadSuccess = useCallback(async (pdf: PDFDocumentProxy) => {
+    pdfRef.current = pdf;
+    setNumPages(pdf.numPages);
+    setCurrentPage(1);
+    setScaleMode("fitWidth");
+    const runFit = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      void computeFitWidthScale(pdf, el).then(setScale);
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(runFit);
+    });
+  }, []);
+
+  const handleFitWidth = useCallback(async () => {
+    const pdf = pdfRef.current;
+    const el = containerRef.current;
+    if (!pdf || !el) return;
+    setScaleMode("fitWidth");
+    setScale(await computeFitWidthScale(pdf, el));
+  }, []);
+
+  const handleScaleChange = useCallback((next: number) => {
+    setScaleMode("manual");
+    setScale(next);
+  }, []);
 
   useEffect(() => {
     const pdf = pdfRef.current;
@@ -62,18 +83,65 @@ export default function PDFViewer() {
 
   const searchScrollPageRef = useRef<number | null>(null);
 
-  const scrollToPage = useCallback((page: number) => {
-    const el = pageRefs.current.get(page);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, []);
+  const findTitleTopInPage = useCallback(
+    (wrapper: HTMLDivElement, title: string): number | null => {
+      const textLayer = wrapper.querySelector(".react-pdf__Page__textContent");
+      if (!textLayer) return null;
+      const tokens = title.split(/\s+/).filter(Boolean);
+      const needle =
+        tokens.length >= 2
+          ? tokens.slice(0, 2).join("").slice(0, 8)
+          : (tokens[0] || "").slice(0, 8);
+      if (!needle) return null;
+      const spans = textLayer.querySelectorAll("span");
+      for (const span of spans) {
+        const txt = (span.textContent ?? "").replace(/\s+/g, "");
+        if (txt.includes(needle)) {
+          return (span as HTMLElement).offsetTop;
+        }
+      }
+      return null;
+    },
+    []
+  );
+
+  const scrollToPage = useCallback(
+    (page: number, y?: number | null, title?: string | null) => {
+      const container = containerRef.current;
+      const wrapper = pageRefs.current.get(page);
+      if (!container || !wrapper) return;
+
+      const wrapperTop = wrapper.offsetTop - container.offsetTop;
+
+      let inPageOffset = 0;
+
+      if (typeof y === "number" && y > 0) {
+        const canvas = wrapper.querySelector("canvas");
+        if (canvas) {
+          inPageOffset = (y / (canvas.height / scale)) * canvas.clientHeight;
+        }
+      }
+
+      if (inPageOffset === 0 && title) {
+        const found = findTitleTopInPage(wrapper, title);
+        if (found !== null) {
+          inPageOffset = found;
+        }
+      }
+
+      container.scrollTo({
+        top: wrapperTop + inPageOffset,
+        behavior: "smooth",
+      });
+    },
+    [scale, findTitleTopInPage]
+  );
 
   const scheduleScrollToPage = useCallback(
-    (page: number) => {
-      const t1 = window.setTimeout(() => scrollToPage(page), 60);
-      const t2 = window.setTimeout(() => scrollToPage(page), 220);
-      const t3 = window.setTimeout(() => scrollToPage(page), 450);
+    (page: number, y?: number | null, title?: string | null) => {
+      const t1 = window.setTimeout(() => scrollToPage(page, y, title), 60);
+      const t2 = window.setTimeout(() => scrollToPage(page, y, title), 220);
+      const t3 = window.setTimeout(() => scrollToPage(page, y, title), 450);
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
@@ -107,7 +175,7 @@ export default function PDFViewer() {
   useEffect(() => {
     const nav = useAppStore.getState().pdfNav;
     if (!nav) return;
-    return scheduleScrollToPage(nav.page);
+    return scheduleScrollToPage(nav.page, nav.y, nav.title);
   }, [pdfNav?.nonce, scheduleScrollToPage]);
 
   useEffect(() => {
@@ -128,7 +196,7 @@ export default function PDFViewer() {
   const handlePageChange = useCallback(
     (page: number) => {
       setCurrentPage(page);
-      scrollToPage(page);
+      scrollToPage(page, null, null);
     },
     [scrollToPage]
   );
@@ -161,8 +229,30 @@ export default function PDFViewer() {
     if (!currentDocId) {
       pdfRef.current = null;
       setNumPages(0);
+      setScaleMode("fitWidth");
     }
   }, [currentDocId]);
+
+  useEffect(() => {
+    if (scaleMode !== "fitWidth" || numPages === 0) return;
+    const pdf = pdfRef.current;
+    const el = containerRef.current;
+    if (!pdf || !el) return;
+    let tid: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      clearTimeout(tid);
+      tid = window.setTimeout(() => {
+        void computeFitWidthScale(pdf, el).then(setScale);
+      }, 120);
+    };
+    const ro = new ResizeObserver(schedule);
+    ro.observe(el);
+    schedule();
+    return () => {
+      ro.disconnect();
+      clearTimeout(tid);
+    };
+  }, [scaleMode, numPages, currentDocId]);
 
   if (!currentDocId || !currentDocMeta) {
     return (
@@ -181,7 +271,8 @@ export default function PDFViewer() {
         numPages={numPages}
         scale={scale}
         onPageChange={handlePageChange}
-        onScaleChange={setScale}
+        onScaleChange={handleScaleChange}
+        onFitWidth={handleFitWidth}
       />
       <div className="pdf-content" ref={containerRef}>
         <TextSelectionPopover containerRef={containerRef} />

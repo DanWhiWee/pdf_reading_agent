@@ -15,15 +15,23 @@ class PDFService:
         file_path.write_bytes(file_bytes)
 
         doc = fitz.open(file_path)
-        toc_raw = doc.get_toc()
+        toc_raw = doc.get_toc(simple=False)
+        toc_items = []
+        for t in toc_raw:
+            item = {"level": t[0], "title": t[1], "page": t[2], "y": None}
+            if len(t) >= 4 and isinstance(t[3], dict):
+                dest = t[3]
+                if "to" in dest and isinstance(dest["to"], fitz.Point):
+                    item["y"] = float(dest["to"].y)
+                elif "to" in dest and hasattr(dest["to"], "y"):
+                    item["y"] = float(dest["to"].y)
+            toc_items.append(item)
         meta = {
             "id": doc_id,
             "filename": filename,
             "title": doc.metadata.get("title") or filename,
             "num_pages": len(doc),
-            "toc": [
-                {"level": t[0], "title": t[1], "page": t[2]} for t in toc_raw
-            ],
+            "toc": toc_items,
         }
         doc.close()
         return meta

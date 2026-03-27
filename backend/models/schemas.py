@@ -31,6 +31,7 @@ class TOCItem(BaseModel):
     level: int
     title: str
     page: int
+    y: Optional[float] = None
 
 
 class DocumentMeta(BaseModel):

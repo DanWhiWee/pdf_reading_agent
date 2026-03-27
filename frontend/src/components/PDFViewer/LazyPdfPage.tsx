@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Page } from "react-pdf";
 import type { PDFPageProxy } from "pdfjs-dist";
+import { getPdfRenderDevicePixelRatio } from "../../utils/pdfDisplay";
 
 export interface SearchDomHint {
   query: string;
@@ -365,6 +366,8 @@ export default function LazyPdfPage({
           <Page
             pageNumber={pageNumber}
             scale={scale}
+            devicePixelRatio={getPdfRenderDevicePixelRatio()}
+            canvasBackground="#faf9f7"
             renderTextLayer={true}
             renderAnnotationLayer={true}
             onLoadSuccess={(p) => setPdfPage(p as unknown as PDFPageProxy)}

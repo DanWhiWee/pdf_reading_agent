@@ -25,6 +25,8 @@ function readStoredDoc(): {
 
 export interface PdfNavTarget {
   page: number;
+  y?: number | null;
+  title?: string | null;
   nonce: number;
 }
 
@@ -60,7 +62,7 @@ interface AppState {
   setSelectedText: (text: string, page?: number) => void;
   clearSelectedText: () => void;
 
-  navigatePdf: (opts: { page: number }) => void;
+  navigatePdf: (opts: { page: number; y?: number | null; title?: string | null }) => void;
 
   setPdfSearchResults: (hits: SearchHit[], query: string, index?: number) => void;
   clearPdfSearch: () => void;
@@ -133,10 +135,12 @@ export const useAppStore = create<AppState>((set) => ({
     set({ selectedText: text, selectedPage: page ?? null }),
   clearSelectedText: () => set({ selectedText: "", selectedPage: null }),
 
-  navigatePdf: ({ page }) =>
+  navigatePdf: ({ page, y, title }) =>
     set({
       pdfNav: {
         page,
+        y: y ?? null,
+        title: title ?? null,
         nonce: Date.now(),
       },
     }),

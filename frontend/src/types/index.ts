@@ -2,6 +2,7 @@ export interface TOCItem {
   level: number;
   title: string;
   page: number;
+  y?: number | null;
 }
 
 export interface DocumentMeta {
