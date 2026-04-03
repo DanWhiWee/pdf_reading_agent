@@ -39,7 +39,10 @@ def _load_env_file():
 
 _load_env_file()
 
-_api_key = os.getenv("LLM_API_KEY", "")
+# 兼容 .env 里误写为小写的情况（Linux 下 getenv 区分大小写）
+_api_key = os.getenv("LLM_API_KEY") or os.getenv("llm_api_key") or ""
+if _api_key and not os.getenv("LLM_API_KEY"):
+    os.environ["LLM_API_KEY"] = _api_key
 if _api_key:
     os.environ["OPENAI_API_KEY"] = _api_key
     print(f"[config] LLM_MODEL={os.getenv('LLM_MODEL')}, API key loaded (len={len(_api_key)})")

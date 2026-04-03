@@ -1,6 +1,7 @@
+import json
 import uuid
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set
 
 import fitz  # PyMuPDF
 
@@ -92,6 +93,33 @@ class PDFService:
     def get_file_path(self, doc_id: str) -> Optional[Path]:
         file_path = self.upload_dir / f"{doc_id}.pdf"
         return file_path if file_path.exists() else None
+
+    def annotations_path(self, doc_id: str) -> Optional[Path]:
+        if not self.get_file_path(doc_id):
+            return None
+        return self.upload_dir / f"{doc_id}.annotations.json"
+
+    def read_annotations(self, doc_id: str) -> List[Any]:
+        p = self.annotations_path(doc_id)
+        if not p or not p.is_file():
+            return []
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+        if isinstance(data, dict) and isinstance(data.get("items"), list):
+            return data["items"]
+        return []
+
+    def write_annotations(self, doc_id: str, items: List[Any]) -> None:
+        if not self.get_file_path(doc_id):
+            raise FileNotFoundError("Document not found")
+        p = self.annotations_path(doc_id)
+        assert p is not None
+        p.write_text(
+            json.dumps({"items": items}, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     def extract_context_for_chat(
         self,

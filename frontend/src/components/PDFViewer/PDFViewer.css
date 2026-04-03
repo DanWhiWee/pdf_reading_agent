@@ -10,6 +10,19 @@
   width: 420px;
 }
 
+.upload-area-theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.upload-area-theme-label {
+  font-size: 13px;
+  color: #595959;
+}
+
 .pdf-toc-split-outer {
   height: 100%;
   min-height: 0;
@@ -174,11 +187,6 @@
   min-width: 48px;
 }
 
-.pdf-page-inner {
-  position: relative;
-  display: inline-block;
-}
-
 .pdf-viewer {
   display: flex;
   flex-direction: column;
@@ -233,84 +241,63 @@
 
 .pdf-content {
   flex: 1;
-  overflow-y: auto;
-  padding: 20px;
+  overflow: hidden;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  align-items: stretch;
+  gap: 0;
   position: relative;
 }
 
-.pdf-page-wrapper {
-  /* Slightly warm paper reduces glare vs pure #fff (long reading) */
-  background: #faf9f7;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22), 0 0 1px rgba(0, 0, 0, 0.08);
-  position: relative;
-}
-
-.pdf-page-placeholder {
+/* PDFium viewer */
+.pdfium-viewer-root {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
   width: 100%;
-  box-sizing: border-box;
-  background: linear-gradient(180deg, #4a5056 0%, #3a3e44 100%);
-  border-radius: 1px;
+  position: relative;
 }
 
-/* Canvas sits under text layer but still captures hit-testing in some browsers */
-.pdf-viewer .react-pdf__Page__canvas {
-  pointer-events: none !important;
-  image-rendering: auto;
-  /* Hint layer compositing; avoids some GPUs blurring scaled canvases */
-  transform: translateZ(0);
-  backface-visibility: hidden;
+/* 位图页默认可被浏览器当成图片拖拽，拖选时会出现禁止光标并打断选区 */
+.pdfium-viewer-root img {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
-/* Let mouse events reach the text layer for selection (annotation sits on top by default) */
-.pdf-viewer .annotationLayer {
-  pointer-events: none;
+.pdfium-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
 }
 
-.pdf-viewer .textLayer {
-  user-select: text;
-  cursor: text;
+/* Ant Design Spin：tip 需嵌套子节点才生效 */
+.pdfium-spin-placeholder {
+  min-height: 140px;
+  min-width: 200px;
 }
 
-.pdf-viewer .textLayer span {
-  user-select: text;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+.pdfium-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #ff4d4f;
+  font-size: 14px;
 }
 
-.page-number-label {
-  text-align: center;
-  padding: 4px 0;
-  font-size: 11px;
-  color: #8c8c8c;
-  background: #faf9f7;
-}
-
-.text-selection-popover {
+/* selectionMenu：在选区局部坐标内顶边上方，由 EmbedPDF CounterRotate 对齐页面旋转 */
+.pdfium-selection-ask-anchor {
   position: absolute;
-  z-index: 10000;
-  background: #fff;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  padding: 4px;
-  animation: popoverFadeIn 0.15s ease-out;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 8px));
+  pointer-events: auto;
+  z-index: 40;
 }
 
-@keyframes popoverFadeIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -90%);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -100%);
-  }
-}
-
-/* react-pdf text layer selection highlighting */
-.react-pdf__Page__textContent ::selection {
-  background: rgba(22, 119, 255, 0.3);
+.pdfium-selection-ask-btn {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
 }

@@ -1,5 +1,7 @@
-import { Upload, message } from "antd";
+import { Select, Upload, message } from "antd";
 import { InboxOutlined } from "@ant-design/icons";
+import type { ReaderBackgroundId } from "../../constants/readerTheme";
+import { READER_THEME_OPTIONS } from "../../constants/readerTheme";
 import { uploadPDF } from "../../services/api";
 import { useAppStore } from "../../stores/appStore";
 import { waitForRagIndex } from "../../utils/ragPoll";
@@ -7,7 +9,7 @@ import { waitForRagIndex } from "../../utils/ragPoll";
 const { Dragger } = Upload;
 
 export default function UploadArea() {
-  const { setCurrentDoc } = useAppStore();
+  const { setCurrentDoc, readerBackground, setReaderBackground } = useAppStore();
 
   const handleUpload = async (file: File) => {
     try {
@@ -44,6 +46,17 @@ export default function UploadArea() {
         <p className="ant-upload-text">Click or drag PDF file to upload</p>
         <p className="ant-upload-hint">Supports single PDF file upload</p>
       </Dragger>
+      <div className="upload-area-theme-row">
+        <span className="upload-area-theme-label">阅读背景</span>
+        <Select
+          size="small"
+          value={readerBackground}
+          onChange={(v) => setReaderBackground(v as ReaderBackgroundId)}
+          options={READER_THEME_OPTIONS}
+          style={{ width: 112 }}
+          popupMatchSelectWidth={false}
+        />
+      </div>
     </div>
   );
 }

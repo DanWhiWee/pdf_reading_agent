@@ -11,7 +11,7 @@ interface Props {
 export default function ChatInput({ onSend, onStop }: Props) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { isStreaming, selectedText, clearSelectedText } = useAppStore();
+  const { isStreaming, selectedText, selectedPage, clearSelectedText } = useAppStore();
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -37,20 +37,32 @@ export default function ChatInput({ onSend, onStop }: Props) {
 
   return (
     <div className="chat-input-area">
-      {selectedText && (
+      {(selectedText || selectedPage) && (
         <div className="selected-text-preview">
-          <Tag
-            color="blue"
-            closable
-            onClose={clearSelectedText}
-            closeIcon={<CloseOutlined />}
-          >
-            Selected: "
-            {selectedText.length > 50
-              ? selectedText.slice(0, 50) + "..."
-              : selectedText}
-            "
-          </Tag>
+          {selectedPage ? (
+            <Tag
+              color="geekblue"
+              closable
+              onClose={clearSelectedText}
+              closeIcon={<CloseOutlined />}
+            >
+              当前页上下文: 第 {selectedPage} 页
+            </Tag>
+          ) : null}
+          {selectedText ? (
+            <Tag
+              color="blue"
+              closable
+              onClose={clearSelectedText}
+              closeIcon={<CloseOutlined />}
+            >
+              Selected: "
+              {selectedText.length > 50
+                ? selectedText.slice(0, 50) + "..."
+                : selectedText}
+              "
+            </Tag>
+          ) : null}
         </div>
       )}
       <div className="input-row">

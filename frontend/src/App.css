@@ -12,9 +12,16 @@ body,
   overflow: hidden;
 }
 
+/* antd <App> 会多一层 .ant-app，默认无高度，会打断 #root → .app 的 height:100% 链导致整页高度为 0 */
+.ant-app {
+  height: 100%;
+  min-height: 0;
+}
+
 .app {
   height: 100%;
   width: 100%;
+  min-height: 0;
 }
 
 .pdf-pane-main {
@@ -28,4 +35,62 @@ body,
 
 .pdf-pane-main--solo {
   height: 100%;
+}
+
+.app--chat-collapsed {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.chat-reveal-rail {
+  flex-shrink: 0;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  border: none;
+  border-right: 1px solid #e0e0e0;
+  background: #f0f2f5;
+  cursor: pointer;
+  color: #595959;
+  font-size: 14px;
+}
+
+.chat-reveal-rail:hover {
+  background: #e6e9ed;
+  color: #1677ff;
+}
+
+.chat-reveal-rail-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.12em;
+  font-size: 13px;
+}
+
+.app__reader-full {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-reader-suspense-fallback {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #4a4d50;
+}
+
+.pdf-reader-suspense-spin-placeholder {
+  min-height: 120px;
+  min-width: 200px;
 }

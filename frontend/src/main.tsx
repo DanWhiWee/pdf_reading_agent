@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ConfigProvider } from "antd";
+import { App as AntApp, ConfigProvider } from "antd";
 import "katex/dist/katex.min.css";
 import App from "./App";
 
@@ -14,7 +14,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         },
       }}
     >
-      <App />
+      <AntApp style={{ height: "100%", minHeight: 0 }}>
+        <App />
+      </AntApp>
     </ConfigProvider>
   </React.StrictMode>
 );

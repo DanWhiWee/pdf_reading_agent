@@ -21,6 +21,47 @@ export function getPDFFileUrl(docId: string): string {
   return `${BASE}/api/pdf/${docId}/file`;
 }
 
+/** EmbedPDF `AnnotationTransferItem[]` 的 JSON 形态，由后端原样存取 */
+export async function fetchPdfAnnotations(
+  docId: string,
+): Promise<unknown[]> {
+  const res = await fetch(`${BASE}/api/pdf/${docId}/annotations`);
+  if (!res.ok) {
+    if (res.status === 404) return [];
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as { items?: unknown[] };
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+export async function savePdfAnnotations(
+  docId: string,
+  items: unknown[],
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/pdf/${docId}/annotations`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+}
+
+/** 页面关闭/刷新时尽力送达（不保证响应体可读） */
+export function savePdfAnnotationsKeepalive(
+  docId: string,
+  items: unknown[],
+): void {
+  const body = JSON.stringify({ items });
+  void fetch(`${BASE}/api/pdf/${docId}/annotations`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  });
+}
+
 export async function searchPDF(
   docId: string,
   query: string
@@ -29,6 +70,18 @@ export async function searchPDF(
     `${BASE}/api/pdf/${docId}/search?q=${encodeURIComponent(query)}`
   );
   return res.json();
+}
+
+export async function fetchPageText(
+  docId: string,
+  page: number
+): Promise<string> {
+  const res = await fetch(`${BASE}/api/pdf/${docId}/text/${page}`);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as { page: number; text: string };
+  return data.text || "";
 }
 
 export async function fetchRagStatus(docId: string): Promise<{ ready: boolean }> {

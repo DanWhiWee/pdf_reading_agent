@@ -10,3 +10,5 @@ dist/
 *.tsbuildinfo
 .venv/
 venv/
+dialogue.md
+plans/

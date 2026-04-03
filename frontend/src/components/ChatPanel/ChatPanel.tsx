@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { Typography } from "antd";
-import { RobotOutlined } from "@ant-design/icons";
+import { Button, Typography } from "antd";
+import { MenuFoldOutlined, RobotOutlined } from "@ant-design/icons";
 import { useAppStore } from "../../stores/appStore";
 import { useChat } from "../../hooks/useChat";
 import MessageItem from "./MessageItem";
@@ -8,7 +8,7 @@ import ChatInput from "./ChatInput";
 import "./ChatPanel.css";
 
 export default function ChatPanel() {
-  const { messages, isStreaming } = useAppStore();
+  const { messages, isStreaming, setChatPanelCollapsed } = useAppStore();
   const { sendMessage, stopGeneration } = useChat();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -30,9 +30,17 @@ export default function ChatPanel() {
     <div className="chat-panel">
       <div className="chat-header">
         <RobotOutlined style={{ fontSize: 20, color: "#1677ff" }} />
-        <Typography.Title level={5} style={{ margin: 0 }}>
+        <Typography.Title level={5} style={{ margin: 0, flex: 1 }}>
           PDF Reading Assistant
         </Typography.Title>
+        <Button
+          type="text"
+          size="small"
+          icon={<MenuFoldOutlined />}
+          title="收起对话栏"
+          aria-label="收起对话栏"
+          onClick={() => setChatPanelCollapsed(true)}
+        />
       </div>
 
       <div className="message-list" ref={listRef}>

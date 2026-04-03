@@ -1,7 +1,38 @@
 import { create } from "zustand";
+import type { ReaderBackgroundId } from "../constants/readerTheme";
 import type { ChatMessage, CitationMeta, DocumentMeta, SearchHit } from "../types";
 
 const DOC_SESSION_KEY = "pdf-reading-agent-current-doc";
+const READER_BG_KEY = "pdf-reading-agent-reader-bg";
+const CHAT_COLLAPSED_KEY = "pdf-reading-agent-chat-collapsed";
+
+function readReaderBackground(): ReaderBackgroundId {
+  if (typeof localStorage === "undefined") return "default";
+  try {
+    const v = localStorage.getItem(READER_BG_KEY);
+    if (
+      v === "default" ||
+      v === "eye" ||
+      v === "gray" ||
+      v === "warm" ||
+      v === "dark"
+    ) {
+      return v;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "default";
+}
+
+function readChatCollapsed(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem(CHAT_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 function readStoredDoc(): {
   currentDocId: string | null;
@@ -60,14 +91,22 @@ interface AppState {
   clearMessages: () => void;
 
   setSelectedText: (text: string, page?: number) => void;
+  setSelectedPage: (page: number | null) => void;
   clearSelectedText: () => void;
 
   navigatePdf: (opts: { page: number; y?: number | null; title?: string | null }) => void;
 
   setPdfSearchResults: (hits: SearchHit[], query: string, index?: number) => void;
+  setPdfSearchIndex: (index: number) => void;
   clearPdfSearch: () => void;
   pdfSearchNext: () => void;
   pdfSearchPrev: () => void;
+
+  readerBackground: ReaderBackgroundId;
+  setReaderBackground: (id: ReaderBackgroundId) => void;
+
+  chatPanelCollapsed: boolean;
+  setChatPanelCollapsed: (collapsed: boolean) => void;
 }
 
 const initialDoc = readStoredDoc();
@@ -81,6 +120,26 @@ export const useAppStore = create<AppState>((set) => ({
   selectedPage: null,
   pdfNav: null,
   pdfSearch: null,
+
+  readerBackground: readReaderBackground(),
+  setReaderBackground: (id) => {
+    try {
+      localStorage.setItem(READER_BG_KEY, id);
+    } catch {
+      /* ignore */
+    }
+    set({ readerBackground: id });
+  },
+
+  chatPanelCollapsed: readChatCollapsed(),
+  setChatPanelCollapsed: (collapsed) => {
+    try {
+      localStorage.setItem(CHAT_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    set({ chatPanelCollapsed: collapsed });
+  },
 
   setCurrentDoc: (id, meta) => {
     try {
@@ -133,6 +192,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   setSelectedText: (text, page) =>
     set({ selectedText: text, selectedPage: page ?? null }),
+  setSelectedPage: (page) =>
+    set((s) => ({ selectedText: s.selectedText, selectedPage: page })),
   clearSelectedText: () => set({ selectedText: "", selectedPage: null }),
 
   navigatePdf: ({ page, y, title }) =>
@@ -155,6 +216,14 @@ export const useAppStore = create<AppState>((set) => ({
               query: query.trim(),
               index: Math.min(Math.max(0, index), hits.length - 1),
             },
+    }),
+
+  setPdfSearchIndex: (index) =>
+    set((s) => {
+      const ps = s.pdfSearch;
+      if (!ps?.hits.length) return {};
+      const i = Math.min(Math.max(0, index), ps.hits.length - 1);
+      return { pdfSearch: { ...ps, index: i } };
     }),
 
   clearPdfSearch: () => set({ pdfSearch: null }),
