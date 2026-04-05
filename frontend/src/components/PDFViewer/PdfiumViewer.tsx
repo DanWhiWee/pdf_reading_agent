@@ -224,18 +224,106 @@ function SelectionAskFloatingMenu({
   );
 }
 
-function DocumentLoader({ fileUrl }: { fileUrl: string }) {
+function resolvePdfFetchUrl(fileUrl: string): string {
+  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
+    return fileUrl;
+  }
+  const path = fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`;
+  return `${window.location.origin}${path}`;
+}
+
+function pdfDisplayName(stem: string): string {
+  const s = stem?.trim() || "document";
+  return /\.pdf$/i.test(s) ? s : `${s}.pdf`;
+}
+
+/**
+ * 使用页面主线程 fetch 完整 PDF 再以 buffer 打开，避免 openDocumentUrl 在部分环境下
+ * 对相对路径 / 代理响应解析异常；切换文档时先 closeAll，防止 EmbedPDF 内部多文档状态错乱。
+ */
+function DocumentLoader({
+  fileUrl,
+  displayName,
+  onLoadError,
+}: {
+  fileUrl: string;
+  displayName: string;
+  onLoadError?: (msg: string) => void;
+}) {
   const { provides: docManager } = useDocumentManagerCapability();
-  const loadedUrlRef = useRef("");
 
   useEffect(() => {
-    if (!docManager || !fileUrl || fileUrl === loadedUrlRef.current) return;
-    loadedUrlRef.current = fileUrl;
-    docManager.openDocumentUrl({ url: fileUrl }).wait(
-      () => {},
-      (err) => console.error("Failed to open document:", err),
+    if (!docManager || !fileUrl) return;
+    let cancelled = false;
+    const absUrl = resolvePdfFetchUrl(fileUrl);
+    const name = pdfDisplayName(displayName);
+
+    docManager.closeAllDocuments().wait(
+      () => {
+        if (cancelled) return;
+        void (async () => {
+          try {
+            // 必须绕过 HTTP 磁盘缓存：后端对 /file 曾返回长缓存 + ETag，再次请求易为 304 且无 body，
+            // fetch().arrayBuffer() 会得到空，表现为「响应体过短」。
+            const res = await fetch(absUrl, {
+              cache: "no-store",
+              headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+            });
+            if (cancelled) return;
+            if (res.status === 304) {
+              throw new Error(
+                "收到 HTTP 304 且无正文（缓存协商异常）。请硬刷新页面；若仍出现请反馈。",
+              );
+            }
+            if (!res.ok) {
+              const hint = await res.text().catch(() => "");
+              throw new Error(
+                `获取 PDF 失败 (HTTP ${res.status})` +
+                  (hint ? `：${hint.slice(0, 160)}` : ` ${res.statusText}`),
+              );
+            }
+            const buf = await res.arrayBuffer();
+            if (cancelled) return;
+            if (buf.byteLength < 8) {
+              throw new Error(
+                `PDF 数据过短（HTTP ${res.status}，${buf.byteLength} 字节）。请确认直连 ` +
+                  `${absUrl} 能下载完整 PDF，或检查代理是否改写响应。`,
+              );
+            }
+            docManager.openDocumentBuffer({
+              buffer: buf,
+              name,
+              autoActivate: true,
+            }).wait(
+              () => {},
+              (err) => {
+                if (cancelled) return;
+                const msg =
+                  err && typeof err === "object" && "message" in err
+                    ? String((err as { message?: string }).message)
+                    : String(err);
+                console.error("PDFium openDocumentBuffer failed:", err);
+                onLoadError?.(
+                  msg ||
+                    "PDF 无法在浏览器引擎中打开（加密或 PDFium 不支持的特性时，其它阅读器仍可能能打开）",
+                );
+              },
+            );
+          } catch (e) {
+            if (cancelled) return;
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error("PDF fetch / open failed:", e);
+            onLoadError?.(msg);
+          }
+        })();
+      },
+      ignore,
     );
-  }, [docManager, fileUrl]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [docManager, fileUrl, displayName, onLoadError]);
 
   return null;
 }
@@ -770,7 +858,11 @@ const PdfiumViewer = forwardRef<PdfiumViewerHandle, Props>(
         <EmbedPDF engine={engine} plugins={plugins}>
           {({ activeDocumentId }) => (
             <>
-              <DocumentLoader fileUrl={fileUrl} />
+              <DocumentLoader
+                fileUrl={fileUrl}
+                displayName={exportFileStem || "document"}
+                onLoadError={onLoadError}
+              />
               {activeDocumentId ? (
                 <ViewerContent
                   documentId={activeDocumentId}

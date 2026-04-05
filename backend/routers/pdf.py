@@ -42,7 +42,8 @@ async def get_pdf_file(doc_id: str):
         filename=file_path.name,
         headers={
             "Content-Disposition": f'inline; filename="{file_path.name}"',
-            "Cache-Control": "public, max-age=86400, immutable",
+            # 避免前端 fetch 走缓存协商拿到 304 却无 body（ArrayBuffer 为空）
+            "Cache-Control": "private, max-age=0, must-revalidate",
         },
     )
 
