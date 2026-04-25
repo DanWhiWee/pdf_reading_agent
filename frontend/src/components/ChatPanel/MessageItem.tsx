@@ -63,6 +63,13 @@ export default function MessageItem({
             </span>
           </div>
         )}
+        {message.imageDataUrl && (
+          <img
+            src={message.imageDataUrl}
+            alt="截图"
+            className="message-screenshot"
+          />
+        )}
         {isUser ? (
           <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>
             {message.content}

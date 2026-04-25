@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from "react";
-import { Allotment } from "allotment";
 import { MenuUnfoldOutlined } from "@ant-design/icons";
 import { useAppStore } from "../../stores/appStore";
 import TOCSidebar from "./TOCSidebar";
@@ -13,9 +12,11 @@ export default function PdfTocSplit({ children }: { children: ReactNode }) {
     return <div className="pdf-pane-main pdf-pane-main--solo">{children}</div>;
   }
 
-  if (!tocVisible) {
-    return (
-      <div className="pdf-toc-split-outer pdf-toc-split-outer--collapsed">
+  // Always keep children mounted to prevent PdfiumViewer from reinitializing.
+  // TOC is hidden via CSS (display:none) rather than unmounted.
+  return (
+    <div className={`pdf-toc-split-outer${tocVisible ? "" : " pdf-toc-split-outer--collapsed"}`}>
+      {!tocVisible && (
         <button
           type="button"
           className="pdf-toc-expand-rail"
@@ -25,21 +26,11 @@ export default function PdfTocSplit({ children }: { children: ReactNode }) {
           <MenuUnfoldOutlined />
           <span className="pdf-toc-expand-rail-text">目录</span>
         </button>
-        <div className="pdf-pane-main">{children}</div>
+      )}
+      <div className="pdf-toc-pane" style={tocVisible ? undefined : { display: "none" }}>
+        <TOCSidebar onCollapse={() => setTocVisible(false)} />
       </div>
-    );
-  }
-
-  return (
-    <div className="pdf-toc-split-outer">
-      <Allotment defaultSizes={[300, 900]} className="pdf-toc-inner-allotment">
-        <Allotment.Pane minSize={200} maxSize={520} preferredSize={280}>
-          <TOCSidebar onCollapse={() => setTocVisible(false)} />
-        </Allotment.Pane>
-        <Allotment.Pane minSize={320}>
-          <div className="pdf-pane-main">{children}</div>
-        </Allotment.Pane>
-      </Allotment>
+      <div className="pdf-pane-main">{children}</div>
     </div>
   );
 }

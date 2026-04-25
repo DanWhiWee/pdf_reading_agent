@@ -1,7 +1,10 @@
+import fitz
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import pdf, chat
+
+fitz.TOOLS.mupdf_display_errors(False)
 
 app = FastAPI(title="PDF Reading Agent")
 

@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     )
     history: List[ChatMessageDTO] = []
     model: Optional[str] = None
+    image_data: Optional[str] = None
 
 
 class TOCItem(BaseModel):

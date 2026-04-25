@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -59,6 +60,10 @@ class RAGService:
     def __init__(self, data_dir: Path, upload_dir: Path):
         self.data_dir = data_dir
         self.upload_dir = upload_dir
+        # LRU cache capped at RAG_CACHE_SIZE docs to bound memory usage.
+        # Older entries are evicted automatically when the cap is reached.
+        self._cache_size = int(os.getenv("RAG_CACHE_SIZE", "1"))
+        self._index_cache: OrderedDict[str, Tuple[Any, List[Dict[str, Any]]]] = OrderedDict()
 
     def _paths(self, doc_id: str) -> Tuple[Path, Path]:
         return (
@@ -108,9 +113,15 @@ class RAGService:
 
         model = _get_embedder()
         texts = [c["text"] for c in all_chunks]
+        # Limit CPU threads so indexing doesn't max out all cores.
+        try:
+            import torch
+            torch.set_num_threads(2)
+        except Exception:
+            pass
         emb = model.encode(
             texts,
-            batch_size=32,
+            batch_size=64,
             show_progress_bar=False,
             normalize_embeddings=True,
         )
@@ -135,11 +146,16 @@ class RAGService:
             ],
         }
         meta_p.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        self._index_cache.pop(doc_id, None)  # invalidate stale cache on rebuild
         log.warning(
             "RAG index built doc_id=%s chunks=%s dim=%s", doc_id, len(all_chunks), dim
         )
 
     def _load(self, doc_id: str) -> Optional[Tuple[Any, List[Dict[str, Any]]]]:
+        if doc_id in self._index_cache:
+            # Move to end (most recently used)
+            self._index_cache.move_to_end(doc_id)
+            return self._index_cache[doc_id]
         if not self.index_exists(doc_id):
             return None
         try:
@@ -154,6 +170,13 @@ class RAGService:
             if index.ntotal != len(chunks):
                 log.error("RAG: faiss/meta mismatch for %s", doc_id)
                 return None
+            self._index_cache[doc_id] = (index, chunks)
+            self._index_cache.move_to_end(doc_id)
+            # Evict oldest entries beyond cache size
+            while len(self._index_cache) > self._cache_size:
+                evicted = next(iter(self._index_cache))
+                del self._index_cache[evicted]
+                log.warning("RAG: evicted index from cache: %s", evicted)
             return index, chunks
         except Exception:
             log.exception("RAG: load failed %s", doc_id)

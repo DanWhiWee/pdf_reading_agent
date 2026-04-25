@@ -10,12 +10,13 @@ export function useChat() {
     updateLastAssistant,
     setIsStreaming,
     clearSelectedText,
+    aiHistoryRounds,
   } = useAppStore();
 
   const abortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, imageDataUrl?: string) => {
       if (!content.trim() || isStreaming) return;
 
       const snap = useAppStore.getState();
@@ -29,6 +30,7 @@ export function useChat() {
         content,
         selectedText: selText || undefined,
         pageNumber: selPage ?? undefined,
+        imageDataUrl: imageDataUrl || undefined,
       };
       addMessage(userMsg);
 
@@ -42,7 +44,8 @@ export function useChat() {
 
       const history = snap.messages
         .filter((m) => m.content)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m) => ({ role: m.role, content: m.content }))
+        .slice(-(aiHistoryRounds * 2));
 
       const trimmed = content.trim();
       const hasSelection = Boolean(selText && selText.trim());
@@ -69,6 +72,9 @@ export function useChat() {
             selected_text: hasSelection ? selText.trim() : undefined,
             page_number: selPage ?? undefined,
             history,
+            image_data: imageDataUrl
+              ? imageDataUrl.replace(/^data:[^;]+;base64,/, "")
+              : undefined,
           },
           ({ token, kind }) => {
             if (kind === "reasoning") reasoningAcc += token;
@@ -111,6 +117,7 @@ export function useChat() {
     },
     [
       isStreaming,
+      aiHistoryRounds,
       addMessage,
       updateLastAssistant,
       setIsStreaming,

@@ -24,6 +24,12 @@
   gap: 16px;
 }
 
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
 .empty-chat {
   display: flex;
   flex-direction: column;
@@ -227,6 +233,30 @@
   margin-bottom: 8px;
 }
 
+.quick-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.quick-action-chip {
+  padding: 3px 10px;
+  border: 1px solid #d9d9d9;
+  border-radius: 12px;
+  background: #f5f5f5;
+  color: #595959;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.quick-action-chip:hover {
+  background: #e6f4ff;
+  border-color: #91caff;
+  color: #1677ff;
+}
+
 .input-row {
   display: flex;
   align-items: flex-end;
@@ -250,4 +280,52 @@
 .chat-textarea:focus {
   border-color: #1677ff;
   box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+}
+
+/* 截图粘贴预览 */
+.pending-image-preview {
+  position: relative;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.pending-image-preview img {
+  max-height: 80px;
+  max-width: 200px;
+  border-radius: 6px;
+  border: 1px solid #d9d9d9;
+  display: block;
+}
+
+.pending-image-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  padding: 0;
+  line-height: 1;
+}
+
+.pending-image-remove:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* 消息气泡中的截图缩略图 */
+.message-screenshot {
+  max-width: 220px;
+  max-height: 160px;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+  margin-bottom: 6px;
+  display: block;
 }

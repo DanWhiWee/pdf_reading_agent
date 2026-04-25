@@ -28,7 +28,16 @@
   min-height: 0;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.pdf-toc-pane {
+  flex: 0 0 280px;
+  min-width: 180px;
+  max-width: 520px;
+  overflow: hidden;
+  border-right: 1px solid #e0e0e0;
 }
 
 .pdf-toc-inner-allotment {
@@ -259,8 +268,10 @@
   position: relative;
 }
 
-/* 位图页默认可被浏览器当成图片拖拽，拖选时会出现禁止光标并打断选区 */
+/* 阅读主题：对 PDFium 渲染的页面图片施加 CSS filter 染色 */
+/* EmbedPDF RenderLayer 输出 <img> 而非 <canvas> */
 .pdfium-viewer-root img {
+  filter: var(--page-filter, none);
   -webkit-user-drag: none;
   user-drag: none;
 }

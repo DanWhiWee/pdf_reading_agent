@@ -89,6 +89,7 @@ class LLMService:
         context: str = "",
         selected_text: str = "",
         rag_mode: bool = False,
+        image_data: Optional[str] = None,
     ) -> List[dict]:
         sys_content = SYSTEM_PROMPT + (RAG_SYSTEM_ADDENDUM if rag_mode else "")
         messages: List[dict] = [{"role": "system", "content": sys_content}]
@@ -108,7 +109,20 @@ class LLMService:
                 "### Highlighted excerpt (user focus — explain it using the PDF above)\n" + sel
             )
         parts.append("### Current request\n" + (user_message or "").strip())
-        messages.append({"role": "user", "content": "\n\n".join(parts)})
+
+        text_content = "\n\n".join(parts)
+        if image_data:
+            user_content: Any = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{image_data}"},
+                },
+                {"type": "text", "text": text_content},
+            ]
+        else:
+            user_content = text_content
+
+        messages.append({"role": "user", "content": user_content})
         return messages
 
     async def stream_chat(
@@ -119,11 +133,13 @@ class LLMService:
         selected_text: str = "",
         model: Optional[str] = None,
         rag_mode: bool = False,
+        image_data: Optional[str] = None,
     ) -> AsyncGenerator[Tuple[str, str], None]:
         history = history or []
         model_name = model or self.cfg.model
         messages = self._build_messages(
-            user_message, history, context, selected_text, rag_mode=rag_mode
+            user_message, history, context, selected_text,
+            rag_mode=rag_mode, image_data=image_data,
         )
 
         kwargs: dict = {

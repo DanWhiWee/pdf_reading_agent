@@ -31,6 +31,8 @@ export interface ChatMessage {
   citations?: CitationMeta[];
   selectedText?: string;
   pageNumber?: number;
+  /** 用户粘贴的截图，base64 DataURL，仅用于本地展示 */
+  imageDataUrl?: string;
 }
 
 export interface SearchHit {

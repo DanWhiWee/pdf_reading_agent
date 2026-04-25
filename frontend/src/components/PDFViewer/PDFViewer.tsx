@@ -5,6 +5,7 @@ import { useAppStore } from "../../stores/appStore";
 import {
   READER_OUTER_BG,
   READER_VIEWPORT_BG,
+  READER_PAGE_FILTER,
 } from "../../constants/readerTheme";
 import { getPDFFileUrl } from "../../services/api";
 import UploadArea from "./UploadArea";
@@ -14,6 +15,21 @@ import PdfiumViewer, {
   type PdfiumViewerHandle,
 } from "./PdfiumViewer";
 import "./PDFViewer.css";
+
+function lastPageKey(docId: string) {
+  return `pdf-last-page-${docId}`;
+}
+
+function saveLastPage(docId: string, page: number) {
+  try { localStorage.setItem(lastPageKey(docId), String(page)); } catch { /* ignore */ }
+}
+
+function loadLastPage(docId: string): number {
+  try {
+    const v = parseInt(localStorage.getItem(lastPageKey(docId)) ?? "", 10);
+    return isNaN(v) || v < 1 ? 1 : v;
+  } catch { return 1; }
+}
 
 export default function PDFViewer() {
   const { currentDocId, currentDocMeta, readerBackground } = useAppStore();
@@ -36,6 +52,17 @@ export default function PDFViewer() {
     setLoadError(null);
     setNumPages(n);
     setCurrentPage(1);
+    // Restore last reading position (skip page 1 — it's the default)
+    const docId = useAppStore.getState().currentDocId;
+    if (docId) {
+      const saved = loadLastPage(docId);
+      if (saved > 1) {
+        // Small delay to let the viewer finish its initial FitWidth zoom
+        setTimeout(() => {
+          useAppStore.getState().navigatePdf({ page: saved });
+        }, 300);
+      }
+    }
   }, []);
 
   const handleLoadError = useCallback((msg: string) => {
@@ -68,6 +95,8 @@ export default function PDFViewer() {
     (page: number) => {
       setCurrentPage(page);
       setSelectedPage(page);
+      const docId = useAppStore.getState().currentDocId;
+      if (docId) saveLastPage(docId, page);
     },
     [setSelectedPage],
   );
@@ -135,11 +164,13 @@ export default function PDFViewer() {
           appDocId={currentDocId}
           exportFileStem={currentDocMeta.filename}
           readerViewportBg={READER_VIEWPORT_BG[readerBackground]}
+          pageFilter={READER_PAGE_FILTER[readerBackground]}
           onPageChange={handlePageChange}
           onDocReady={handleDocReady}
           onLoadError={handleLoadError}
           onZoomLevel={setScale}
           navPage={pdfNav?.page ?? null}
+          navNonce={pdfNav?.nonce ?? null}
           onAnnotationUiChange={setAnnotUi}
         />
       </div>

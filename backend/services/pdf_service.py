@@ -1,4 +1,5 @@
 import json
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, List, Optional, Set
@@ -15,6 +16,22 @@ class PDFService:
         file_path = self.upload_dir / f"{doc_id}.pdf"
         file_path.write_bytes(file_bytes)
 
+        # Re-save via a temp file to repair structural issues (e.g. missing XObject
+        # subtype) that MuPDF tolerates but PDFium (WASM renderer) rejects.
+        # Must use a temp file: PyMuPDF disallows garbage-collect save to the same
+        # open file handle.
+        doc = fitz.open(file_path)
+        with tempfile.NamedTemporaryFile(
+            suffix=".pdf", dir=self.upload_dir, delete=False
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            doc.save(tmp_path, garbage=4, deflate=True, clean=True)
+            doc.close()
+            tmp_path.replace(file_path)
+        except Exception:
+            doc.close()
+            tmp_path.unlink(missing_ok=True)
         doc = fitz.open(file_path)
         toc_raw = doc.get_toc(simple=False)
         toc_items = []
@@ -90,6 +107,38 @@ class PDFService:
             doc.close()
         return results
 
+    def get_all_links(self, doc_id: str) -> List[dict]:
+        """Return all internal GoTo links for the document, with rects normalized
+        to [0,1] relative to each page's width/height so the frontend can position
+        clickable hotspots without knowing the absolute PDF dimensions."""
+        file_path = self.upload_dir / f"{doc_id}.pdf"
+        doc = fitz.open(file_path)
+        result: List[dict] = []
+        try:
+            for i, page in enumerate(doc):
+                w, h = page.rect.width, page.rect.height
+                if w == 0 or h == 0:
+                    continue
+                for link in page.get_links():
+                    if link.get("kind") != fitz.LINK_GOTO:
+                        continue
+                    r = link.get("from")
+                    if not r:
+                        continue
+                    dest_page = link.get("page")
+                    if dest_page is None:
+                        continue
+                    to = link.get("to")
+                    result.append({
+                        "page": i + 1,
+                        "rect": [r.x0 / w, r.y0 / h, r.x1 / w, r.y1 / h],
+                        "dest_page": int(dest_page) + 1,
+                        "dest_y": float(to.y / h) if to else 0.0,
+                    })
+        finally:
+            doc.close()
+        return result
+
     def get_file_path(self, doc_id: str) -> Optional[Path]:
         file_path = self.upload_dir / f"{doc_id}.pdf"
         return file_path if file_path.exists() else None
@@ -129,22 +178,17 @@ class PDFService:
     ) -> str:
         """
         Build plain-text context within max_chars.
-        If center_page is set, expand outward from that page first (selection-aware),
-        then fall back to adding other pages by distance.
+        Reads pages lazily in center-outward order so large PDFs only
+        touch the pages actually needed.
         """
-        pages = self.extract_all_text(doc_id)
-        if not pages:
+        file_path = self.upload_dir / f"{doc_id}.pdf"
+        if not file_path.exists():
             return ""
-
-        n = len(pages)
-
-        def block(p: int) -> str:
-            if not (1 <= p <= n):
-                return ""
-            t = (pages[p - 1].get("text") or "").strip()
-            if not t:
-                return ""
-            return f"=== Page {p} ===\n{t}"
+        doc = fitz.open(file_path)
+        n = len(doc)
+        if n == 0:
+            doc.close()
+            return ""
 
         order: List[int] = []
         if center_page and 1 <= center_page <= n:
@@ -163,19 +207,22 @@ class PDFService:
 
         chunks: List[str] = []
         total = 0
-        for p in order:
-            blk = block(p)
-            if not blk:
-                continue
-            sep = 2 if chunks else 0
-            if total + len(blk) + sep <= max_chars:
-                chunks.append(blk)
-                total += len(blk) + sep
-                continue
-            remain = max_chars - total - sep - 120
-            if remain > 300:
-                raw = (pages[p - 1].get("text") or "").strip()
-                chunks.append(f"=== Page {p} ===\n{raw[:remain]}\n...[truncated]")
-            break
+        try:
+            for p in order:
+                raw = (doc[p - 1].get_text() or "").strip()
+                if not raw:
+                    continue
+                blk = f"=== Page {p} ===\n{raw}"
+                sep = 2 if chunks else 0
+                if total + len(blk) + sep <= max_chars:
+                    chunks.append(blk)
+                    total += len(blk) + sep
+                    continue
+                remain = max_chars - total - sep - 120
+                if remain > 300:
+                    chunks.append(f"=== Page {p} ===\n{raw[:remain]}\n...[truncated]")
+                break
+        finally:
+            doc.close()
 
         return "\n\n".join(chunks)

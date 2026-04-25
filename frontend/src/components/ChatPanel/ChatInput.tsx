@@ -3,15 +3,24 @@ import { Button, Tag } from "antd";
 import { SendOutlined, StopOutlined, CloseOutlined } from "@ant-design/icons";
 import { useAppStore } from "../../stores/appStore";
 
+const QUICK_ACTIONS = ["解释这句话", "翻译成中文", "总结", "用简单语言解释"];
+
 interface Props {
-  onSend: (content: string) => void;
+  onSend: (content: string, imageDataUrl?: string) => void;
   onStop: () => void;
 }
 
 export default function ChatInput({ onSend, onStop }: Props) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { isStreaming, selectedText, selectedPage, clearSelectedText } = useAppStore();
+  const {
+    isStreaming,
+    selectedText,
+    selectedPage,
+    clearSelectedText,
+    pendingImage,
+    setPendingImage,
+  } = useAppStore();
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -24,8 +33,9 @@ export default function ChatInput({ onSend, onStop }: Props) {
   const handleSend = () => {
     const text = input.trim();
     if (!text || isStreaming) return;
-    onSend(text);
+    onSend(text, pendingImage ?? undefined);
     setInput("");
+    setPendingImage(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -35,10 +45,47 @@ export default function ChatInput({ onSend, onStop }: Props) {
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            setPendingImage(reader.result);
+          }
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  };
+
   return (
     <div className="chat-input-area">
-      {(selectedText || selectedPage) && (
+      {(selectedText || selectedPage || pendingImage) && (
         <div className="selected-text-preview">
+          {selectedText ? (
+            <div className="quick-actions-row">
+              {QUICK_ACTIONS.map((action) => (
+                <button
+                  key={action}
+                  className="quick-action-chip"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (isStreaming) return;
+                    onSend(action, undefined);
+                  }}
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {selectedPage ? (
             <Tag
               color="geekblue"
@@ -63,6 +110,18 @@ export default function ChatInput({ onSend, onStop }: Props) {
               "
             </Tag>
           ) : null}
+          {pendingImage ? (
+            <div className="pending-image-preview">
+              <img src={pendingImage} alt="截图预览" />
+              <button
+                className="pending-image-remove"
+                onClick={() => setPendingImage(null)}
+                title="移除截图"
+              >
+                <CloseOutlined />
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
       <div className="input-row">
@@ -72,7 +131,8 @@ export default function ChatInput({ onSend, onStop }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your question about the PDF..."
+          onPaste={handlePaste}
+          placeholder="输入问题，或粘贴截图后提问..."
           rows={1}
         />
         {isStreaming ? (

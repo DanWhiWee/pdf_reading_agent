@@ -68,6 +68,13 @@ async def search_in_pdf(doc_id: str, q: str = ""):
     return {"results": results}
 
 
+@router.get("/{doc_id}/links")
+async def get_links(doc_id: str):
+    if not pdf_service.get_file_path(doc_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"links": pdf_service.get_all_links(doc_id)}
+
+
 @router.get("/{doc_id}/rag-status")
 async def rag_status(doc_id: str):
     return {"ready": rag_service.index_exists(doc_id)}

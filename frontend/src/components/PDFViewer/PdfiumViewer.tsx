@@ -61,6 +61,8 @@ import {
   fetchPdfAnnotations,
   savePdfAnnotations,
   savePdfAnnotationsKeepalive,
+  fetchDocLinks,
+  type PdfLink,
 } from "../../services/api";
 import type { SearchHit } from "../../types";
 
@@ -334,9 +336,11 @@ function ViewerContent({
   exportFileStem,
   renderDpr,
   readerViewportBg,
+  pageFilter,
   onPageChange,
   onDocReady,
   navPage,
+  navNonce,
   onZoomLevel,
   onAnnotationUiChange,
   viewerHandleRef,
@@ -346,9 +350,11 @@ function ViewerContent({
   exportFileStem: string;
   renderDpr: number;
   readerViewportBg: string;
+  pageFilter?: string;
   onPageChange?: (page: number) => void;
   onDocReady?: (numPages: number) => void;
   navPage?: number | null;
+  navNonce?: number | null;
   onZoomLevel?: (scale: number) => void;
   onAnnotationUiChange?: (s: AnnotationToolbarUiState) => void;
   viewerHandleRef: React.MutableRefObject<PdfiumViewerHandle>;
@@ -366,6 +372,7 @@ function ViewerContent({
   const lastEmittedZoomRef = useRef<number | null>(null);
   const lastEmittedPageRef = useRef<number | null>(null);
   const [embedDocLoaded, setEmbedDocLoaded] = useState(false);
+  const [pageLinksMap, setPageLinksMap] = useState<Map<number, PdfLink[]>>(new Map());
   const hydratingRef = useRef(false);
   const saveEnabledRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -485,6 +492,16 @@ function ViewerContent({
     if (!embedDocLoaded || !appDocId || !annCap) return;
     /** 与拉取服务端标注并行：避免「未返回 JSON 前用户已标高亮」导致永远不保存 */
     saveEnabledRef.current = true;
+    // Load PDF internal links for click-through navigation hotspots
+    void fetchDocLinks(appDocId).then((links) => {
+      const m = new Map<number, PdfLink[]>();
+      for (const lk of links) {
+        const arr = m.get(lk.page) ?? [];
+        arr.push(lk);
+        m.set(lk.page, arr);
+      }
+      setPageLinksMap(m);
+    });
     let cancelled = false;
     const scope = annCap.forDocument(documentId);
     void fetchPdfAnnotations(appDocId).then((items) => {
@@ -569,7 +586,10 @@ function ViewerContent({
   useEffect(() => {
     if (!documentId || !annCap) return;
     const a = annCap.forDocument(documentId);
+    // Reset annotation tool on every doc load so clicks are normal Browse mode.
+    a.setActiveTool(null);
     const off = a.onActiveToolChange(() => emitAnnotUi());
+    emitAnnotUi();
     return () => off();
   }, [documentId, annCap, emitAnnotUi]);
 
@@ -695,10 +715,17 @@ function ViewerContent({
     }
   }, [scrollHook?.state?.totalPages, onDocReady]);
 
+  // Track last-consumed nonce to prevent re-scrolling when scrollHook.provides
+  // object identity changes during normal scroll re-renders.
+  const lastNavNonceRef = useRef<number | null>(null);
   useEffect(() => {
     if (navPage == null || navPage <= 0 || !scrollHook?.provides) return;
+    if (navNonce == null || lastNavNonceRef.current === navNonce) return;
+    lastNavNonceRef.current = navNonce;
     scrollHook.provides.scrollToPage({ pageNumber: navPage - 1 });
-  }, [navPage, scrollHook?.provides]);
+  }, [navPage, navNonce, scrollHook?.provides]);
+
+  const navigatePdf = useAppStore((s) => s.navigatePdf);
 
   const renderSelectionAskMenu = useCallback(
     (props: SelectionMenuPropsBase<SelectionSelectionContext>) => (
@@ -733,18 +760,27 @@ function ViewerContent({
             >
               <Scroller
                 documentId={documentId}
-                renderPage={({ width, height, pageIndex }) => (
+                renderPage={({ width, height, pageIndex }) => {
+                  const pageNum = pageIndex + 1;
+                  const links = pageLinksMap.get(pageNum) ?? [];
+                  return (
                   <PagePointerProvider
                     documentId={documentId}
                     pageIndex={pageIndex}
                     style={{ width, height }}
                   >
-                    <RenderLayer
-                      documentId={documentId}
-                      pageIndex={pageIndex}
-                      dpr={renderDpr}
-                      draggable={false}
-                    />
+                    <div
+                      style={pageFilter && pageFilter !== "none"
+                        ? { position: "absolute", inset: 0, filter: pageFilter }
+                        : { position: "absolute", inset: 0 }}
+                    >
+                      <RenderLayer
+                        documentId={documentId}
+                        pageIndex={pageIndex}
+                        dpr={renderDpr}
+                        draggable={false}
+                      />
+                    </div>
                     <SearchLayer documentId={documentId} pageIndex={pageIndex} />
                     <SelectionLayer
                       documentId={documentId}
@@ -753,8 +789,30 @@ function ViewerContent({
                       selectionMenu={renderSelectionAskMenu}
                     />
                     <AnnotationLayer documentId={documentId} pageIndex={pageIndex} />
+                    {/* Transparent hotspots for PDF internal GoTo links */}
+                    {links.map((lk, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          position: "absolute",
+                          left: `${lk.rect[0] * 100}%`,
+                          top: `${lk.rect[1] * 100}%`,
+                          width: `${(lk.rect[2] - lk.rect[0]) * 100}%`,
+                          height: `${(lk.rect[3] - lk.rect[1]) * 100}%`,
+                          cursor: "pointer",
+                          zIndex: 10,
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigatePdf({ page: lk.dest_page });
+                        }}
+                      />
+                    ))}
                   </PagePointerProvider>
-                )}
+                  );
+                }}
               />
             </Viewport>
           )}
@@ -772,11 +830,14 @@ type Props = {
   exportFileStem: string;
   /** 视口页间背景色，与阅读主题一致 */
   readerViewportBg?: string;
+  /** PDF 页面 canvas 的 CSS filter，随阅读主题染色 */
+  pageFilter?: string;
   onPageChange?: (page: number) => void;
   onDocReady?: (numPages: number) => void;
   onLoadError?: (msg: string) => void;
   onZoomLevel?: (scale: number) => void;
   navPage?: number | null;
+  navNonce?: number | null;
   onAnnotationUiChange?: (s: AnnotationToolbarUiState) => void;
 };
 
@@ -787,11 +848,13 @@ const PdfiumViewer = forwardRef<PdfiumViewerHandle, Props>(
       appDocId,
       exportFileStem,
       readerViewportBg = "#f1f3f5",
+      pageFilter = "none",
       onPageChange,
       onDocReady,
       onLoadError,
       onZoomLevel,
       navPage,
+      navNonce,
       onAnnotationUiChange,
     },
     ref,
@@ -854,7 +917,10 @@ const PdfiumViewer = forwardRef<PdfiumViewerHandle, Props>(
     }
 
     return (
-      <div className="pdfium-viewer-root">
+      <div
+        className="pdfium-viewer-root"
+        style={{ "--page-filter": pageFilter } as React.CSSProperties}
+      >
         <EmbedPDF engine={engine} plugins={plugins}>
           {({ activeDocumentId }) => (
             <>
@@ -870,9 +936,11 @@ const PdfiumViewer = forwardRef<PdfiumViewerHandle, Props>(
                   exportFileStem={exportFileStem}
                   renderDpr={renderDpr}
                   readerViewportBg={readerViewportBg}
+                  pageFilter={pageFilter}
                   onPageChange={onPageChange}
                   onDocReady={onDocReady}
                   navPage={navPage}
+                  navNonce={navNonce}
                   onZoomLevel={onZoomLevel}
                   onAnnotationUiChange={onAnnotationUiChange}
                   viewerHandleRef={viewerHandleRef}

@@ -5,6 +5,33 @@ import type { ChatMessage, CitationMeta, DocumentMeta, SearchHit } from "../type
 const DOC_SESSION_KEY = "pdf-reading-agent-current-doc";
 const READER_BG_KEY = "pdf-reading-agent-reader-bg";
 const CHAT_COLLAPSED_KEY = "pdf-reading-agent-chat-collapsed";
+const AI_HISTORY_ROUNDS_KEY = "pdf-reading-agent-ai-history-rounds";
+const CHAT_HISTORY_PREFIX = "pdf-chat-history-";
+
+function chatHistoryKey(docId: string) {
+  return `${CHAT_HISTORY_PREFIX}${docId}`;
+}
+
+function loadChatHistory(docId: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(chatHistoryKey(docId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ChatMessage[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveChatHistory(docId: string, messages: ChatMessage[]) {
+  try {
+    // Strip imageDataUrl (base64 images) to keep localStorage small
+    const toSave = messages.map(({ imageDataUrl: _, ...rest }) => rest);
+    localStorage.setItem(chatHistoryKey(docId), JSON.stringify(toSave));
+  } catch {
+    /* ignore quota errors */
+  }
+}
 
 function readReaderBackground(): ReaderBackgroundId {
   if (typeof localStorage === "undefined") return "default";
@@ -32,6 +59,17 @@ function readChatCollapsed(): boolean {
   } catch {
     return false;
   }
+}
+
+function readAiHistoryRounds(): number {
+  if (typeof localStorage === "undefined") return 10;
+  try {
+    const v = parseInt(localStorage.getItem(AI_HISTORY_ROUNDS_KEY) ?? "", 10);
+    if (!isNaN(v) && v >= 1 && v <= 50) return v;
+  } catch {
+    /* ignore */
+  }
+  return 10;
 }
 
 function readStoredDoc(): {
@@ -105,16 +143,27 @@ interface AppState {
   readerBackground: ReaderBackgroundId;
   setReaderBackground: (id: ReaderBackgroundId) => void;
 
+  /** 用户粘贴的待发截图，base64 DataURL */
+  pendingImage: string | null;
+  setPendingImage: (v: string | null) => void;
+
   chatPanelCollapsed: boolean;
   setChatPanelCollapsed: (collapsed: boolean) => void;
+
+  /** Rounds of chat history sent to AI (1 round = 1 user + 1 assistant message) */
+  aiHistoryRounds: number;
+  setAiHistoryRounds: (n: number) => void;
 }
 
 const initialDoc = readStoredDoc();
+const initialMessages = initialDoc.currentDocId
+  ? loadChatHistory(initialDoc.currentDocId)
+  : [];
 
 export const useAppStore = create<AppState>((set) => ({
   currentDocId: initialDoc.currentDocId,
   currentDocMeta: initialDoc.currentDocMeta,
-  messages: [],
+  messages: initialMessages,
   isStreaming: false,
   selectedText: "",
   selectedPage: null,
@@ -131,6 +180,9 @@ export const useAppStore = create<AppState>((set) => ({
     set({ readerBackground: id });
   },
 
+  pendingImage: null,
+  setPendingImage: (v) => set({ pendingImage: v }),
+
   chatPanelCollapsed: readChatCollapsed(),
   setChatPanelCollapsed: (collapsed) => {
     try {
@@ -141,13 +193,30 @@ export const useAppStore = create<AppState>((set) => ({
     set({ chatPanelCollapsed: collapsed });
   },
 
+  aiHistoryRounds: readAiHistoryRounds(),
+  setAiHistoryRounds: (n) => {
+    const clamped = Math.min(50, Math.max(1, n));
+    try {
+      localStorage.setItem(AI_HISTORY_ROUNDS_KEY, String(clamped));
+    } catch {
+      /* ignore */
+    }
+    set({ aiHistoryRounds: clamped });
+  },
+
   setCurrentDoc: (id, meta) => {
     try {
       sessionStorage.setItem(DOC_SESSION_KEY, JSON.stringify({ id, meta }));
     } catch {
       /* ignore */
     }
-    set({ currentDocId: id, currentDocMeta: meta, pdfNav: null, pdfSearch: null });
+    set({
+      currentDocId: id,
+      currentDocMeta: meta,
+      messages: loadChatHistory(id),
+      pdfNav: null,
+      pdfSearch: null,
+    });
   },
   clearDoc: () => {
     try {
@@ -164,13 +233,19 @@ export const useAppStore = create<AppState>((set) => ({
     });
   },
 
-  addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
+  addMessage: (msg) =>
+    set((s) => {
+      const messages = [...s.messages, msg];
+      if (s.currentDocId) saveChatHistory(s.currentDocId, messages);
+      return { messages };
+    }),
   updateLastMessage: (content) =>
     set((s) => {
       const msgs = [...s.messages];
       if (msgs.length > 0) {
         msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content };
       }
+      if (s.currentDocId) saveChatHistory(s.currentDocId, msgs);
       return { messages: msgs };
     }),
   updateLastAssistant: (patch) =>
@@ -185,10 +260,17 @@ export const useAppStore = create<AppState>((set) => ({
         ...(patch.reasoning !== undefined ? { reasoning: patch.reasoning } : {}),
         ...(patch.citations !== undefined ? { citations: patch.citations } : {}),
       };
+      if (s.currentDocId) saveChatHistory(s.currentDocId, msgs);
       return { messages: msgs };
     }),
   setIsStreaming: (v) => set({ isStreaming: v }),
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () =>
+    set((s) => {
+      if (s.currentDocId) {
+        try { localStorage.removeItem(chatHistoryKey(s.currentDocId)); } catch { /* ignore */ }
+      }
+      return { messages: [] };
+    }),
 
   setSelectedText: (text, page) =>
     set({ selectedText: text, selectedPage: page ?? null }),

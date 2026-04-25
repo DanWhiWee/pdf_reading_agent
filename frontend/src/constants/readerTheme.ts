@@ -24,6 +24,15 @@ export const READER_VIEWPORT_BG: Record<ReaderBackgroundId, string> = {
   dark: "#2d3238",
 };
 
+/** PDF 页面 canvas 的 CSS filter（让页面本体随主题染色） */
+export const READER_PAGE_FILTER: Record<ReaderBackgroundId, string> = {
+  default: "none",
+  eye:     "sepia(20%) hue-rotate(50deg) brightness(0.95)",
+  gray:    "grayscale(15%) brightness(0.93)",
+  warm:    "sepia(25%) brightness(0.96)",
+  dark:    "invert(85%) hue-rotate(180deg)",
+};
+
 export const READER_THEME_OPTIONS: {
   value: ReaderBackgroundId;
   label: string;

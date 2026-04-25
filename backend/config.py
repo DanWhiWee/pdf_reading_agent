@@ -39,6 +39,14 @@ def _load_env_file():
 
 _load_env_file()
 
+# Limit CPU thread usage by linear algebra libraries (OMP/MKL/BLAS) so that
+# sentence-transformers doesn't spin up threads on all cores while idle.
+# Must be set before torch/numpy are imported.
+for _k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    if not os.environ.get(_k):
+        os.environ[_k] = os.getenv("RAG_CPU_THREADS", "2")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 # 兼容 .env 里误写为小写的情况（Linux 下 getenv 区分大小写）
 _api_key = os.getenv("LLM_API_KEY") or os.getenv("llm_api_key") or ""
 if _api_key and not os.getenv("LLM_API_KEY"):

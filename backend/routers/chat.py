@@ -73,6 +73,7 @@ async def stream_chat(request: ChatRequest):
                 selected_text=request.selected_text or "",
                 model=request.model,
                 rag_mode=rag_mode,
+                image_data=request.image_data,
             ):
                 yield f"data: {json.dumps({'token': token, 'kind': kind}, ensure_ascii=False)}\n\n"
             done_payload: dict = {"done": True}

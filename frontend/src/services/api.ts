@@ -84,6 +84,20 @@ export async function fetchPageText(
   return data.text || "";
 }
 
+export interface PdfLink {
+  page: number;
+  rect: [number, number, number, number]; // normalized [x0,y0,x1,y1] 0-1
+  dest_page: number;
+  dest_y: number; // normalized y in destination page 0-1
+}
+
+export async function fetchDocLinks(docId: string): Promise<PdfLink[]> {
+  const res = await fetch(`${BASE}/api/pdf/${docId}/links`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { links?: PdfLink[] };
+  return Array.isArray(data.links) ? data.links : [];
+}
+
 export async function fetchRagStatus(docId: string): Promise<{ ready: boolean }> {
   const res = await fetch(`${BASE}/api/pdf/${docId}/rag-status`);
   if (!res.ok) return { ready: false };
@@ -97,6 +111,7 @@ export interface StreamChatParams {
   page_number?: number | null;
   history?: { role: string; content: string }[];
   model?: string;
+  image_data?: string;
 }
 
 export type StreamToken = { token: string; kind: "reasoning" | "content" };
@@ -121,6 +136,7 @@ export async function streamChat(
   if (params.page_number != null && params.page_number > 0) {
     body.page_number = params.page_number;
   }
+  if (params.image_data) body.image_data = params.image_data;
 
   const res = await fetch(`${BASE}/api/chat/stream`, {
     method: "POST",
