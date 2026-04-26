@@ -148,6 +148,33 @@ class PDFService:
             return None
         return self.upload_dir / f"{doc_id}.annotations.json"
 
+    def chat_path(self, doc_id: str) -> Optional[Path]:
+        if not self.get_file_path(doc_id):
+            return None
+        return self.upload_dir / f"{doc_id}.chat.json"
+
+    def read_chat(self, doc_id: str) -> List[Any]:
+        p = self.chat_path(doc_id)
+        if not p or not p.is_file():
+            return []
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+        if isinstance(data, list):
+            return data
+        return []
+
+    def write_chat(self, doc_id: str, messages: List[Any]) -> None:
+        if not self.get_file_path(doc_id):
+            raise FileNotFoundError("Document not found")
+        p = self.chat_path(doc_id)
+        assert p is not None
+        p.write_text(
+            json.dumps(messages, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
     def read_annotations(self, doc_id: str) -> List[Any]:
         p = self.annotations_path(doc_id)
         if not p or not p.is_file():

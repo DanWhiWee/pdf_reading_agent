@@ -259,6 +259,13 @@
   position: relative;
 }
 
+.pdf-backend-waiting {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* PDFium viewer */
 .pdfium-viewer-root {
   flex: 1;

@@ -22,6 +22,39 @@ export function getPDFFileUrl(docId: string): string {
 }
 
 /** EmbedPDF `AnnotationTransferItem[]` 的 JSON 形态，由后端原样存取 */
+export async function fetchChatHistory(docId: string): Promise<unknown[]> {
+  const res = await fetch(`${BASE}/api/pdf/${docId}/chat`);
+  if (!res.ok) {
+    if (res.status === 404) return [];
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as { messages?: unknown[] };
+  return Array.isArray(data.messages) ? data.messages : [];
+}
+
+export async function saveChatHistory(
+  docId: string,
+  messages: unknown[],
+): Promise<void> {
+  await fetch(`${BASE}/api/pdf/${docId}/chat`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: messages }),
+  });
+}
+
+export function saveChatHistoryKeepalive(
+  docId: string,
+  messages: unknown[],
+): void {
+  void fetch(`${BASE}/api/pdf/${docId}/chat`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: messages }),
+    keepalive: true,
+  });
+}
+
 export async function fetchPdfAnnotations(
   docId: string,
 ): Promise<unknown[]> {

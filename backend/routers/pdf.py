@@ -80,11 +80,22 @@ async def rag_status(doc_id: str):
     return {"ready": rag_service.index_exists(doc_id)}
 
 
-@router.get("/{doc_id}/annotations")
-async def get_annotations(doc_id: str):
+@router.get("/{doc_id}/chat")
+async def get_chat(doc_id: str):
     if not pdf_service.get_file_path(doc_id):
         raise HTTPException(status_code=404, detail="Document not found")
-    return {"items": pdf_service.read_annotations(doc_id)}
+    return {"messages": pdf_service.read_chat(doc_id)}
+
+
+@router.put("/{doc_id}/chat")
+async def put_chat(doc_id: str, body: AnnotationsPayload):
+    if not pdf_service.get_file_path(doc_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        pdf_service.write_chat(doc_id, body.items)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"ok": True, "count": len(body.items)}
 
 
 @router.put("/{doc_id}/annotations")

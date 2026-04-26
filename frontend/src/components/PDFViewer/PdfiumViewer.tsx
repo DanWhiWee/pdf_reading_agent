@@ -267,11 +267,31 @@ function DocumentLoader({
           try {
             // 必须绕过 HTTP 磁盘缓存：后端对 /file 曾返回长缓存 + ETag，再次请求易为 304 且无 body，
             // fetch().arrayBuffer() 会得到空，表现为「响应体过短」。
-            const res = await fetch(absUrl, {
-              cache: "no-store",
-              headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-            });
+            // 对 5xx / 网络错误（后端冷启动中）自动重试，最多等待约 20s。
+            let res: Response | null = null;
+            const MAX_ATTEMPTS = 10;
+            const RETRY_DELAY_MS = 2000;
+            for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+              if (cancelled) return;
+              if (attempt > 0) {
+                await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+                if (cancelled) return;
+              }
+              try {
+                const r = await fetch(absUrl, {
+                  cache: "no-store",
+                  headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+                });
+                if (r.status < 500) { res = r; break; } // 成功或 4xx，停止重试
+                // 5xx：继续重试
+              } catch {
+                // 连接被拒 / 网络错误：继续重试（最后一次则在下面抛出）
+              }
+            }
             if (cancelled) return;
+            if (!res) {
+              throw new Error("无法连接到后端服务，请确认后端已启动后刷新页面");
+            }
             if (res.status === 304) {
               throw new Error(
                 "收到 HTTP 304 且无正文（缓存协商异常）。请硬刷新页面；若仍出现请反馈。",
