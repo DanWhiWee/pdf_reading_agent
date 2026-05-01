@@ -394,6 +394,9 @@ function ViewerContent({
   const lastEmittedPageRef = useRef<number | null>(null);
   const [embedDocLoaded, setEmbedDocLoaded] = useState(false);
   const [pageLinksMap, setPageLinksMap] = useState<Map<number, PdfLink[]>>(new Map());
+  // Restore page state — must be declared before the onPageChange effect
+  const [restorePage, setRestorePage] = useState(0);
+  const restoreDoneFlagRef = useRef(false);
   const hydratingRef = useRef(false);
   const saveEnabledRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -725,11 +728,11 @@ function ViewerContent({
     const page1 = currentPage + 1;
     if (lastEmittedPageRef.current === page1) return;
     lastEmittedPageRef.current = page1;
-    // Block onPageChange until restore is done (or skipped) to prevent
-    // saveLastPage from overwriting the saved position with page=1/3.
-    if (!restoreDone) return;
+    // Block onPageChange until restore is decided (restorePage !== 0)
+    // to prevent saveLastPage from overwriting the saved position.
+    if (restorePage === 0) return;
     onPageChange?.(page1);
-  }, [scrollHook?.state?.currentPage, onPageChange]);
+  }, [scrollHook?.state?.currentPage, onPageChange, restorePage]);
 
   useEffect(() => {
     const total = scrollHook?.state?.totalPages;
@@ -739,47 +742,80 @@ function ViewerContent({
     }
   }, [scrollHook?.state?.totalPages, onDocReady]);
 
-  // Restore page from localStorage when totalPages becomes known.
-  // Once per document load: fires exactly once, blocks onPageChange until done.
-  const [restoreDone, setRestoreDone] = useState(false);
-  const totalPages = scrollHook?.state?.totalPages;
-  const restoreTriggeredRef = useRef(false);
+  // Restore page from localStorage.
+  // Uses useState to trigger re-render, then useEffect with fresh scrollHook.provides.
+  // Same pattern as navPage (proven to work).
+  const { provides: scrollCap } = useScrollCapability();
 
   useEffect(() => {
-    restoreTriggeredRef.current = false;
-    setRestoreDone(false);
+    setRestorePage(0);
   }, [documentId, appDocId]);
 
   useEffect(() => {
-    if (!scrollHook?.provides || !totalPages || totalPages < 1) return;
-    if (restoreTriggeredRef.current) return;
+    if (!scrollCap || !documentId || !appDocId) return;
+    const docScroll = scrollCap.forDocument(documentId);
 
-    // Wait until we have the real page count (not the initial 1)
-    if (totalPages === 1) return;
+    const tryRestore = () => {
+      const total = docScroll.getTotalPages();
+      if (total < 2) return; // wait for real page count
 
-    restoreTriggeredRef.current = true;
+      let saved = 1;
+      try {
+        const k = `pdf-last-page-${appDocId}`;
+        const v = parseInt(localStorage.getItem(k) ?? "", 10);
+        if (!isNaN(v) && v > 1 && v <= total) saved = v;
+      } catch { /* ignore */ }
 
-    let saved = 1;
-    try {
-      const k = `pdf-last-page-${appDocId}`;
-      const v = parseInt(localStorage.getItem(k) ?? "", 10);
-      if (!isNaN(v) && v > 1 && v <= totalPages) saved = v;
-    } catch { /* ignore */ }
+      console.log('[scrollRestore] totalPages=', total, 'saved=', saved);
+      setRestorePage(saved); // triggers re-render → effect below fires
+    };
 
-    console.log('[scrollRestore] totalPages=', totalPages, 'saved=', saved);
-    if (saved <= 1) {
-      console.log('[scrollRestore] no restore needed');
-      setRestoreDone(true);
-      return;
-    }
+    const off = scrollCap.onLayoutChange(() => tryRestore());
+    return () => off();
+  }, [scrollCap, documentId, appDocId]);
 
-    console.log('[scrollRestore] executing scrollToPage', saved - 1);
-    setTimeout(() => {
-      console.log('[scrollRestore] firing scrollToPage now');
-      scrollHook.provides.scrollToPage({ pageNumber: saved - 1, behavior: "instant" });
-      setRestoreDone(true);
-    }, 800);
-  }, [scrollHook?.provides, documentId, appDocId, totalPages]);
+  // Execute restore when target page is set.
+  // Use DOM scrollIntoView directly instead of EmbedPDF API, which doesn't
+  // work reliably during initial render.
+  useEffect(() => {
+    if (restorePage < 2) return;
+    if (restoreDoneFlagRef.current) return;
+    restoreDoneFlagRef.current = true;
+    console.log('[scrollRestore] target page =', restorePage);
+
+    // Poll: wait until the page element exists in DOM
+    const startTime = Date.now();
+    const poll = () => {
+      if (Date.now() - startTime > 5000) {
+        console.error('[scrollRestore] timed out waiting for page element');
+        setRestorePage(1); // unblock
+        return;
+      }
+
+      // Try EmbedPDF's scroll API first
+      if (scrollHook?.provides) {
+        console.log('[scrollRestore] using scrollHook.provides.scrollToPage');
+        scrollHook.provides.scrollToPage({ pageNumber: restorePage - 1, behavior: "instant" });
+      }
+
+      // Also try DOM scrollIntoView as fallback
+      setTimeout(() => {
+        const pageEl = document.querySelector(`[data-page-index="${restorePage - 1}"]`)
+          ?? document.querySelector(`[data-page-number="${restorePage}"]`);
+        const scroller = document.querySelector('.embedpdf-scroller');
+        if (pageEl && scroller) {
+          console.log('[scrollRestore] DOM scrollIntoView to page', restorePage);
+          pageEl.scrollIntoView({ block: 'start', behavior: 'instant' });
+        } else {
+          console.log('[scrollRestore] page element not ready, retrying in 100ms');
+          setTimeout(poll, 100);
+          return;
+        }
+        setRestorePage(1); // unblock
+      }, 300);
+    };
+    poll();
+  }, [scrollHook?.provides, restorePage]);
 
   // Track last-consumed nonce to prevent re-scrolling when scrollHook.provides
   // object identity changes during normal scroll re-renders.
