@@ -766,7 +766,6 @@ function ViewerContent({
         if (!isNaN(v) && v > 1 && v <= total) saved = v;
       } catch { /* ignore */ }
 
-      console.log('[scrollRestore] totalPages=', total, 'saved=', saved);
       setRestorePage(saved); // triggers re-render → effect below fires
     };
 
@@ -781,20 +780,16 @@ function ViewerContent({
     if (restorePage < 2) return;
     if (restoreDoneFlagRef.current) return;
     restoreDoneFlagRef.current = true;
-    console.log('[scrollRestore] target page =', restorePage);
-
     // Poll: wait until the page element exists in DOM
     const startTime = Date.now();
     const poll = () => {
       if (Date.now() - startTime > 5000) {
-        console.error('[scrollRestore] timed out waiting for page element');
         setRestorePage(1); // unblock
         return;
       }
 
       // Try EmbedPDF's scroll API first
       if (scrollHook?.provides) {
-        console.log('[scrollRestore] using scrollHook.provides.scrollToPage');
         scrollHook.provides.scrollToPage({ pageNumber: restorePage - 1, behavior: "instant" });
       }
 
@@ -804,10 +799,8 @@ function ViewerContent({
           ?? document.querySelector(`[data-page-number="${restorePage}"]`);
         const scroller = document.querySelector('.embedpdf-scroller');
         if (pageEl && scroller) {
-          console.log('[scrollRestore] DOM scrollIntoView to page', restorePage);
           pageEl.scrollIntoView({ block: 'start', behavior: 'instant' });
         } else {
-          console.log('[scrollRestore] page element not ready, retrying in 100ms');
           setTimeout(poll, 100);
           return;
         }
