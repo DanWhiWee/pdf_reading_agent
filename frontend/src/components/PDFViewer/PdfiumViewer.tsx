@@ -19,6 +19,7 @@ import {
   Scroller,
   ScrollPluginPackage,
   useScroll,
+  useScrollCapability,
 } from "@embedpdf/plugin-scroll/react";
 import {
   DocumentContent,
@@ -724,6 +725,9 @@ function ViewerContent({
     const page1 = currentPage + 1;
     if (lastEmittedPageRef.current === page1) return;
     lastEmittedPageRef.current = page1;
+    // Block onPageChange until restore is done (or skipped) to prevent
+    // saveLastPage from overwriting the saved position with page=1/3.
+    if (!restoreDone) return;
     onPageChange?.(page1);
   }, [scrollHook?.state?.currentPage, onPageChange]);
 
@@ -734,6 +738,48 @@ function ViewerContent({
       onDocReady?.(total);
     }
   }, [scrollHook?.state?.totalPages, onDocReady]);
+
+  // Restore page from localStorage when totalPages becomes known.
+  // Once per document load: fires exactly once, blocks onPageChange until done.
+  const [restoreDone, setRestoreDone] = useState(false);
+  const totalPages = scrollHook?.state?.totalPages;
+  const restoreTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    restoreTriggeredRef.current = false;
+    setRestoreDone(false);
+  }, [documentId, appDocId]);
+
+  useEffect(() => {
+    if (!scrollHook?.provides || !totalPages || totalPages < 1) return;
+    if (restoreTriggeredRef.current) return;
+
+    // Wait until we have the real page count (not the initial 1)
+    if (totalPages === 1) return;
+
+    restoreTriggeredRef.current = true;
+
+    let saved = 1;
+    try {
+      const k = `pdf-last-page-${appDocId}`;
+      const v = parseInt(localStorage.getItem(k) ?? "", 10);
+      if (!isNaN(v) && v > 1 && v <= totalPages) saved = v;
+    } catch { /* ignore */ }
+
+    console.log('[scrollRestore] totalPages=', totalPages, 'saved=', saved);
+    if (saved <= 1) {
+      console.log('[scrollRestore] no restore needed');
+      setRestoreDone(true);
+      return;
+    }
+
+    console.log('[scrollRestore] executing scrollToPage', saved - 1);
+    setTimeout(() => {
+      console.log('[scrollRestore] firing scrollToPage now');
+      scrollHook.provides.scrollToPage({ pageNumber: saved - 1, behavior: "instant" });
+      setRestoreDone(true);
+    }, 800);
+  }, [scrollHook?.provides, documentId, appDocId, totalPages]);
 
   // Track last-consumed nonce to prevent re-scrolling when scrollHook.provides
   // object identity changes during normal scroll re-renders.

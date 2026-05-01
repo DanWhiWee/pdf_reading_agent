@@ -109,3 +109,17 @@ cd frontend && npm run build   # tsc + vite 打包 → frontend/dist/
 ### 当前分支说明
 
 活跃分支 `feat/pdfium-migration` 正在迁移至 EmbedPDF/PDFium WASM 渲染器，`backend/routers/pdf.py` 有未提交的改动。
+
+## Agent skills
+
+### Issue 追踪
+
+Issue 使用 GitHub Issues 追踪，通过 `gh` CLI 操作。详见 `docs/agents/issue-tracker.md`。
+
+### 分类标签
+
+五个标准标签：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### 领域文档
+
+单上下文布局 —— 根目录一个 `CONTEXT.md` + `docs/adr/` 存放架构决策。详见 `docs/agents/domain.md`。

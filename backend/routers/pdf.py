@@ -98,6 +98,14 @@ async def put_chat(doc_id: str, body: AnnotationsPayload):
     return {"ok": True, "count": len(body.items)}
 
 
+@router.get("/{doc_id}/annotations")
+async def get_annotations(doc_id: str):
+    if not pdf_service.get_file_path(doc_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    items = pdf_service.read_annotations(doc_id)
+    return {"items": items}
+
+
 @router.put("/{doc_id}/annotations")
 async def put_annotations(doc_id: str, body: AnnotationsPayload):
     if not pdf_service.get_file_path(doc_id):

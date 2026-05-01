@@ -21,15 +21,11 @@ function lastPageKey(docId: string) {
 }
 
 function saveLastPage(docId: string, page: number) {
-  try { localStorage.setItem(lastPageKey(docId), String(page)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(lastPageKey(docId), String(page));
+  } catch { /* ignore */ }
 }
 
-function loadLastPage(docId: string): number {
-  try {
-    const v = parseInt(localStorage.getItem(lastPageKey(docId)) ?? "", 10);
-    return isNaN(v) || v < 1 ? 1 : v;
-  } catch { return 1; }
-}
 
 export default function PDFViewer() {
   const { currentDocId, currentDocMeta, readerBackground } = useAppStore();
@@ -52,17 +48,7 @@ export default function PDFViewer() {
     setLoadError(null);
     setNumPages(n);
     setCurrentPage(1);
-    // Restore last reading position (skip page 1 — it's the default)
-    const docId = useAppStore.getState().currentDocId;
-    if (docId) {
-      const saved = loadLastPage(docId);
-      if (saved > 1) {
-        // Small delay to let the viewer finish its initial FitWidth zoom
-        setTimeout(() => {
-          useAppStore.getState().navigatePdf({ page: saved });
-        }, 300);
-      }
-    }
+    // 恢复上次阅读位置由 PdfiumViewer 内部直接读 localStorage 完成
   }, []);
 
   const handleLoadError = useCallback((msg: string) => {
@@ -96,9 +82,11 @@ export default function PDFViewer() {
       setCurrentPage(page);
       setSelectedPage(page);
       const docId = useAppStore.getState().currentDocId;
-      if (docId) saveLastPage(docId, page);
+      // Only save after document is fully loaded (totalPages > 1), to avoid
+      // initial page=1 overwriting the user's saved position during restore.
+      if (docId && numPages > 1) saveLastPage(docId, page);
     },
-    [setSelectedPage],
+    [setSelectedPage, numPages],
   );
 
   if (!currentDocId || !currentDocMeta) {
